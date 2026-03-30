@@ -27,12 +27,17 @@ test("registers new account/model/config tools", () => {
 
   assert.ok(tools.includes("search_accounts"));
   assert.ok(tools.includes("search_datasets"));
+  assert.ok(tools.includes("search_warehouse_fields"));
+  assert.ok(tools.includes("list_warehouse_tables"));
   assert.ok(tools.includes("search_transformation_models"));
   assert.ok(tools.includes("list_connectors"));
   assert.ok(tools.includes("get_connector"));
   assert.ok(tools.includes("list_dataset_warehouse_fields"));
   assert.ok(tools.includes("get_dataset_warehouse_field"));
   assert.ok(tools.includes("get_dataset_client_config"));
+  assert.ok(tools.includes("create_query_execution"));
+  assert.ok(tools.includes("create_dry_run"));
+  assert.ok(tools.includes("install_all_paid_pro"));
 });
 
 test("search_datasets maps endpoint with dataset search params", async () => {
@@ -64,6 +69,20 @@ test("search_datasets maps endpoint with dataset search params", async () => {
   assert.match(urlSeen, /type=warehouse/);
   assert.match(urlSeen, /enabled=true/);
   assert.equal(result.structuredContent.data[0].id, 7);
+});
+
+test("account-scoped tools default account_id to self", async () => {
+  const server = buildServer();
+  const tool = server._registeredTools.list_datasets;
+  let urlSeen = "";
+
+  globalThis.fetch = async (url) => {
+    urlSeen = url;
+    return jsonResponse(200, { data: [], meta: { page: 1, per_page: 25, total: 0 }, errors: [] });
+  };
+
+  await tool.handler({ page: 1, per_page: 25 });
+  assert.match(urlSeen, /\/accounts\/self\/datasets\?/);
 });
 
 test("search_transformation_models maps endpoint and preserves combined payload", async () => {
@@ -197,4 +216,63 @@ test("list/get warehouse field tools map nested warehouse field endpoints", asyn
     urls[1],
     /\/accounts\/42\/datasets\/9\/warehouse_tables\/55\/warehouse_fields\/77$/,
   );
+});
+
+test("create_query_execution maps POST body and endpoint", async () => {
+  const server = buildServer();
+  const tool = server._registeredTools.create_query_execution;
+  let requestBody = null;
+  let methodSeen = "";
+  let urlSeen = "";
+
+  globalThis.fetch = async (url, options) => {
+    urlSeen = url;
+    methodSeen = options.method;
+    requestBody = JSON.parse(options.body);
+    return jsonResponse(202, { data: { id: 123, state: "pending" }, errors: [] });
+  };
+
+  await tool.handler({
+    account_id: "self",
+    query: "SELECT 1",
+    saved_query_id: 12,
+    run_with_liquid: false,
+  });
+
+  assert.equal(methodSeen, "POST");
+  assert.match(urlSeen, /\/accounts\/self\/query_executions$/);
+  assert.deepEqual(requestBody, {
+    queryExecution: {
+      query: "SELECT 1",
+      savedQueryId: 12,
+      runWithLiquid: false,
+    },
+  });
+});
+
+test("install_all_paid_pro maps package install request", async () => {
+  const server = buildServer();
+  const tool = server._registeredTools.install_all_paid_pro;
+  let requestBody = null;
+  let urlSeen = "";
+
+  globalThis.fetch = async (url, options) => {
+    urlSeen = url;
+    requestBody = JSON.parse(options.body);
+    return jsonResponse(202, { data: { id: 99, status: "pending" }, errors: [] });
+  };
+
+  await tool.handler({
+    account_id: "42",
+    connector_id: "fivetran_123",
+    dataset_display_name: "Shopify Orders",
+    package_version_id: 5,
+    idempotency_key: "abc",
+  });
+
+  assert.match(urlSeen, /\/accounts\/42\/packages\/all_paid_pro\/install$/);
+  assert.equal(requestBody.connectorId, "fivetran_123");
+  assert.equal(requestBody.datasetDisplayName, "Shopify Orders");
+  assert.equal(requestBody.packageVersionId, 5);
+  assert.equal(requestBody.idempotencyKey, "abc");
 });

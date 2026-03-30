@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { railsGet, toToolError } from "../src/http.js";
+import { railsGet, railsPatch, railsPost, toToolError } from "../src/http.js";
 
 function jsonResponse(status, payload) {
   return {
@@ -192,4 +192,53 @@ test("railsGet preserves /api/v1/mcp base path for leading-slash routes", async 
     urlSeen,
     "https://app.growthnirvana.com/api/v1/mcp/accounts/search?q=Stackmatix",
   );
+});
+
+test("railsPost sends json body with headers", async () => {
+  let methodSeen = "";
+  let contentTypeSeen = "";
+  let requestBody = null;
+  globalThis.fetch = async (_url, options) => {
+    methodSeen = options.method;
+    contentTypeSeen = options.headers["Content-Type"];
+    requestBody = JSON.parse(options.body);
+    return jsonResponse(202, { data: { id: 1 }, errors: [] });
+  };
+
+  await railsPost({
+    baseUrl: "https://example.com/api/v1/mcp",
+    apiKey: "secret",
+    path: "/accounts/self/query_executions",
+    params: {},
+    body: { queryExecution: { query: "SELECT 1" } },
+    accountId: "self",
+    timeoutMs: 1000,
+    maxRetries: 0,
+  });
+
+  assert.equal(methodSeen, "POST");
+  assert.equal(contentTypeSeen, "application/json");
+  assert.equal(requestBody.queryExecution.query, "SELECT 1");
+});
+
+test("railsPatch sends patch requests", async () => {
+  let methodSeen = "";
+  globalThis.fetch = async () => {
+    methodSeen = "PATCH";
+    return jsonResponse(200, { data: { id: 9, state: "cancelled" }, errors: [] });
+  };
+
+  const body = await railsPatch({
+    baseUrl: "https://example.com/api/v1/mcp",
+    apiKey: "secret",
+    path: "/accounts/self/query_executions/9/cancel",
+    params: {},
+    body: {},
+    accountId: "self",
+    timeoutMs: 1000,
+    maxRetries: 0,
+  });
+
+  assert.equal(methodSeen, "PATCH");
+  assert.equal(body.data.state, "cancelled");
 });

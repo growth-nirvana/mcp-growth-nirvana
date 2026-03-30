@@ -41,6 +41,7 @@ Key semantics enforced by Rails:
 
 - master key: can operate across accounts
 - client key: restricted to its own account
+- account-scoped tools support `account_id="self"` (default when omitted)
 
 ## Tool set
 
@@ -53,23 +54,39 @@ Search and account-scoped tools:
 - `list_connectors(account_id, provider?, q?, status?, updated_since?, page?, per_page?)`
 - `get_connector(account_id, connector_id)`
 - `search_datasets(account_id, q, page?, per_page?, updated_since?, type?, enabled?)`
+- `list_warehouse_tables(account_id, page?, per_page?, updated_since?, name?, include?)`
+- `search_warehouse_tables(account_id, q, page?, per_page?, include?)`
+- `get_warehouse_table(account_id, warehouse_table_id, include?)`
+- `list_warehouse_fields(account_id, page?, per_page?, updated_since?, name?, include?)`
+- `search_warehouse_fields(account_id, q, page?, per_page?, include?)`
+- `get_warehouse_field(account_id, warehouse_field_id, include?)`
 - `search_transformation_models(account_id, q, dataset_id?, updated_since?, page?, per_page?)`
-- `list_datasets(account_id, page?, per_page?, updated_since?, type?, enabled?)`
+- `list_datasets(account_id, page?, per_page?, updated_since?, type?, enabled?, include?)`
 - `get_dataset(account_id, dataset_id, include?)`
-- `list_dataset_warehouse_tables(account_id, dataset_id, page?, per_page?, updated_since?, name?)`
-- `get_dataset_warehouse_table(account_id, dataset_id, warehouse_table_id)`
-- `list_dataset_warehouse_fields(account_id, dataset_id, warehouse_table_id, page?, per_page?, updated_since?, name?)`
-- `get_dataset_warehouse_field(account_id, dataset_id, warehouse_table_id, warehouse_field_id)`
+- `list_dataset_warehouse_tables(account_id, dataset_id, page?, per_page?, updated_since?, name?, include?)`
+- `get_dataset_warehouse_table(account_id, dataset_id, warehouse_table_id, include?)`
+- `list_dataset_warehouse_fields(account_id, dataset_id, warehouse_table_id, page?, per_page?, updated_since?, name?, include?)`
+- `get_dataset_warehouse_field(account_id, dataset_id, warehouse_table_id, warehouse_field_id, include?)`
 - `list_dataset_transformation_models(account_id, dataset_id, page?, per_page?, updated_since?, folder_id?)`
 - `get_dataset_transformation_model(account_id, dataset_id, transformation_model_id)`
 - `get_dataset_client_config(account_id, dataset_id)`
 
 Top-level account tools:
 
-- `list_transformation_models(account_id, page?, per_page?, updated_since?, folder_id?)`
+- `list_transformation_models(account_id, page?, per_page?, dataset_id?, updated_since?)`
 - `get_transformation_model(account_id, transformation_model_id)`
-- `list_data_transformations(account_id, page?, per_page?, updated_since?)`
+- `list_data_transformations(account_id, page?, per_page?, dataset_id?, active?, updated_since?)`
 - `get_data_transformation(account_id, data_transformation_id)`
+
+Async run tools:
+
+- `create_query_execution(account_id, query, saved_query_id?, run_with_liquid?)`
+- `get_query_execution(account_id, query_execution_id)`
+- `cancel_query_execution(account_id, query_execution_id)`
+- `create_dry_run(account_id, query, context, dataset_id?, package_version_id?, queryable_id?, queryable_type?, run_with_dependencies?, run_with_liquid?)`
+- `get_dry_run(account_id, dry_run_id)`
+- `install_all_paid_pro(account_id, connector_id, dataset_display_name, package_version_id?, dataset_name?, name_suffix?, hotglue_dataset?, stream_token?, idempotency_key?)`
+- `get_package_install(account_id, package_install_id)`
 
 ## Scopes
 
@@ -82,7 +99,11 @@ Scopes expected by the tools:
 - `read:transformation_models`
 - `read:client_dataset_config`
 - `read:data_transformations`
+- `run:query_executions`
+- `run:dry_runs`
+- `run:packages`
 - `read:*` and `*` wildcard support is server-side
+- `run:*` wildcard support is server-side
 
 ## Response and error handling
 

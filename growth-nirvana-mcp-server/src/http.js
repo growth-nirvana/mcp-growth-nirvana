@@ -49,6 +49,81 @@ export async function railsGet({
   maxRetries,
   backoffBaseMs = 200,
 }) {
+  return railsRequest({
+    method: "GET",
+    baseUrl,
+    apiKey,
+    path,
+    params,
+    accountId,
+    timeoutMs,
+    maxRetries,
+    backoffBaseMs,
+  });
+}
+
+export async function railsPost({
+  baseUrl,
+  apiKey,
+  path,
+  params,
+  body,
+  accountId,
+  timeoutMs,
+  maxRetries,
+  backoffBaseMs = 200,
+}) {
+  return railsRequest({
+    method: "POST",
+    baseUrl,
+    apiKey,
+    path,
+    params,
+    body,
+    accountId,
+    timeoutMs,
+    maxRetries,
+    backoffBaseMs,
+  });
+}
+
+export async function railsPatch({
+  baseUrl,
+  apiKey,
+  path,
+  params,
+  body,
+  accountId,
+  timeoutMs,
+  maxRetries,
+  backoffBaseMs = 200,
+}) {
+  return railsRequest({
+    method: "PATCH",
+    baseUrl,
+    apiKey,
+    path,
+    params,
+    body,
+    accountId,
+    timeoutMs,
+    maxRetries,
+    backoffBaseMs,
+  });
+}
+
+export async function railsRequest({
+  method,
+  baseUrl,
+  apiKey,
+  path,
+  params,
+  body: requestBody,
+  accountId,
+  timeoutMs,
+  maxRetries,
+  backoffBaseMs = 200,
+}) {
   const url = buildUrl(baseUrl, path, params);
   let attempt = 0;
 
@@ -58,20 +133,27 @@ export async function railsGet({
     const timeout = setTimeout(() => controller.abort(), timeoutMs);
 
     try {
+      const headers = {
+        Authorization: `Bearer ${apiKey}`,
+        "X-API-Key": apiKey,
+        Accept: "application/json",
+      };
+      const hasBody = requestBody !== undefined;
+      if (hasBody) {
+        headers["Content-Type"] = "application/json";
+      }
+
       const response = await fetch(url, {
-        method: "GET",
-        headers: {
-          Authorization: `Bearer ${apiKey}`,
-          "X-API-Key": apiKey,
-          Accept: "application/json",
-        },
+        method,
+        headers,
+        body: hasBody ? JSON.stringify(requestBody) : undefined,
         signal: controller.signal,
       });
 
       clearTimeout(timeout);
       const text = await response.text();
-      const body = parseJsonSafe(text);
-      const { code, message, errors } = parseRailsError(body);
+      const parsedBody = parseJsonSafe(text);
+      const { code, message, errors } = parseRailsError(parsedBody);
 
       if (!response.ok) {
         console.error(
@@ -97,7 +179,7 @@ export async function railsGet({
         `[growth-nirvana-mcp] url=${url} account_id=${accountId} status=${response.status} error_code=none error_message=none`,
       );
 
-      return body;
+      return parsedBody;
     } catch (error) {
       clearTimeout(timeout);
       if (error?.name === "AbortError") {
