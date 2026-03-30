@@ -81,7 +81,7 @@ Top-level account tools:
 Async run tools:
 
 - `create_query_execution(account_id, query, saved_query_id?, run_with_liquid?)`
-- `get_query_execution(account_id, query_execution_id)`
+- `get_query_execution(account_id, query_execution_id, include?, includeResults?, row_limit?)`
 - `cancel_query_execution(account_id, query_execution_id)`
 - `create_dry_run(account_id, query, context, dataset_id?, package_version_id?, queryable_id?, queryable_type?, run_with_dependencies?, run_with_liquid?)`
 - `get_dry_run(account_id, dry_run_id)`

@@ -773,14 +773,23 @@ export function createServer(config) {
     {
       title: "Get Query Execution",
       description: "GET /accounts/:account_id/query_executions/:id. Scope: run:query_executions.",
-      inputSchema: accountOptional.extend({ query_execution_id: z.union([z.string(), z.number()]) }),
+      inputSchema: accountOptional.extend({
+        query_execution_id: z.union([z.string(), z.number()]),
+        include: z.enum(["results"]).optional(),
+        includeResults: z.boolean().optional(),
+        row_limit: z.number().int().positive().optional(),
+      }),
     },
     async (args, request) => {
       const accountId = normalizeAccountId(args.account_id);
       return request(
         "GET",
         `/accounts/${accountId}/query_executions/${String(args.query_execution_id)}`,
-        {},
+        {
+          include: args.include,
+          includeResults: args.includeResults,
+          row_limit: args.row_limit,
+        },
         undefined,
         accountId,
       );

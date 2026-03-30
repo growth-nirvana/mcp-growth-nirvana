@@ -271,6 +271,33 @@ test("create_query_execution defaults run_with_liquid to false", async () => {
   assert.equal(requestBody.query_execution.saved_query_id, null);
 });
 
+test("get_query_execution supports include/results and row_limit params", async () => {
+  const server = buildServer();
+  const tool = server._registeredTools.get_query_execution;
+  let urlSeen = "";
+
+  globalThis.fetch = async (url) => {
+    urlSeen = url;
+    return jsonResponse(200, {
+      data: { id: 123, state: "done", results: { resultType: "table", rowLimit: 10 } },
+      errors: [],
+    });
+  };
+
+  await tool.handler({
+    account_id: "self",
+    query_execution_id: 123,
+    include: "results",
+    includeResults: true,
+    row_limit: 10,
+  });
+
+  assert.match(urlSeen, /\/accounts\/self\/query_executions\/123\?/);
+  assert.match(urlSeen, /include=results/);
+  assert.match(urlSeen, /includeResults=true/);
+  assert.match(urlSeen, /row_limit=10/);
+});
+
 test("create_dry_run maps snake_case wrapper and default flags", async () => {
   const server = buildServer();
   const tool = server._registeredTools.create_dry_run;
