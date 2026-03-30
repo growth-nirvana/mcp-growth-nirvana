@@ -38,6 +38,8 @@ test("registers new account/model/config tools", () => {
   assert.ok(tools.includes("create_query_execution"));
   assert.ok(tools.includes("create_dry_run"));
   assert.ok(tools.includes("install_all_paid_pro"));
+  assert.ok(tools.includes("create_dataset_bundle_export"));
+  assert.ok(tools.includes("get_dataset_bundle_export"));
 });
 
 test("search_datasets maps endpoint with dataset search params", async () => {
@@ -242,10 +244,59 @@ test("create_query_execution maps POST body and endpoint", async () => {
   assert.equal(methodSeen, "POST");
   assert.match(urlSeen, /\/accounts\/self\/query_executions$/);
   assert.deepEqual(requestBody, {
-    queryExecution: {
+    query_execution: {
       query: "SELECT 1",
-      savedQueryId: 12,
-      runWithLiquid: false,
+      saved_query_id: 12,
+      run_with_liquid: false,
+    },
+  });
+});
+
+test("create_query_execution defaults run_with_liquid to false", async () => {
+  const server = buildServer();
+  const tool = server._registeredTools.create_query_execution;
+  let requestBody = null;
+
+  globalThis.fetch = async (_url, options) => {
+    requestBody = JSON.parse(options.body);
+    return jsonResponse(202, { data: { id: 123, state: "pending" }, errors: [] });
+  };
+
+  await tool.handler({
+    account_id: "self",
+    query: "SELECT 1",
+  });
+
+  assert.equal(requestBody.query_execution.run_with_liquid, false);
+  assert.equal(requestBody.query_execution.saved_query_id, null);
+});
+
+test("create_dry_run maps snake_case wrapper and default flags", async () => {
+  const server = buildServer();
+  const tool = server._registeredTools.create_dry_run;
+  let requestBody = null;
+
+  globalThis.fetch = async (_url, options) => {
+    requestBody = JSON.parse(options.body);
+    return jsonResponse(202, { data: { id: 77, status: "pending" }, errors: [] });
+  };
+
+  await tool.handler({
+    account_id: "self",
+    query: "select 1",
+    context: "SavedQuery",
+  });
+
+  assert.deepEqual(requestBody, {
+    dry_run: {
+      query: "select 1",
+      context: "SavedQuery",
+      dataset_id: null,
+      package_version_id: null,
+      queryable_id: null,
+      queryable_type: null,
+      run_with_dependencies: false,
+      run_with_liquid: false,
     },
   });
 });
@@ -275,4 +326,46 @@ test("install_all_paid_pro maps package install request", async () => {
   assert.equal(requestBody.datasetDisplayName, "Shopify Orders");
   assert.equal(requestBody.packageVersionId, 5);
   assert.equal(requestBody.idempotencyKey, "abc");
+});
+
+test("dataset bundle export tools map create/get endpoints", async () => {
+  const server = buildServer();
+  const createTool = server._registeredTools.create_dataset_bundle_export;
+  const getTool = server._registeredTools.get_dataset_bundle_export;
+  const requests = [];
+
+  globalThis.fetch = async (url, options = {}) => {
+    requests.push({
+      url,
+      method: options.method || "GET",
+      body: options.body ? JSON.parse(options.body) : null,
+    });
+    return jsonResponse(202, { data: { id: 555, status: "pending" }, errors: [] });
+  };
+
+  await createTool.handler({
+    account_id: "self",
+    dataset_id: "42",
+    idempotency_key: "idem-1",
+  });
+
+  await getTool.handler({
+    account_id: "self",
+    dataset_id: "42",
+    bundle_export_id: "555",
+  });
+
+  assert.equal(requests[0].method, "POST");
+  assert.match(requests[0].url, /\/accounts\/self\/datasets\/42\/bundle_exports$/);
+  assert.deepEqual(requests[0].body, {
+    bundleExport: {
+      idempotencyKey: "idem-1",
+    },
+  });
+
+  assert.equal(requests[1].method, "GET");
+  assert.match(
+    requests[1].url,
+    /\/accounts\/self\/datasets\/42\/bundle_exports\/555$/,
+  );
 });

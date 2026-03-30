@@ -755,10 +755,10 @@ export function createServer(config) {
         `/accounts/${accountId}/query_executions`,
         {},
         {
-          queryExecution: {
+          query_execution: {
             query: args.query,
-            savedQueryId: args.saved_query_id,
-            runWithLiquid: args.run_with_liquid,
+            saved_query_id: args.saved_query_id ?? null,
+            run_with_liquid: args.run_with_liquid ?? false,
           },
         },
         accountId,
@@ -833,15 +833,15 @@ export function createServer(config) {
         `/accounts/${accountId}/dry_runs`,
         {},
         {
-          dryRun: {
+          dry_run: {
             query: args.query,
             context: args.context,
-            datasetId: args.dataset_id,
-            packageVersionId: args.package_version_id,
-            queryableId: args.queryable_id,
-            queryableType: args.queryable_type,
-            runWithDependencies: args.run_with_dependencies,
-            runWithLiquid: args.run_with_liquid,
+            dataset_id: args.dataset_id ?? null,
+            package_version_id: args.package_version_id ?? null,
+            queryable_id: args.queryable_id ?? null,
+            queryable_type: args.queryable_type ?? null,
+            run_with_dependencies: args.run_with_dependencies ?? false,
+            run_with_liquid: args.run_with_liquid ?? false,
           },
         },
         accountId,
@@ -917,6 +917,60 @@ export function createServer(config) {
       return request(
         "GET",
         `/accounts/${accountId}/package_installs/${String(args.package_install_id)}`,
+        {},
+        undefined,
+        accountId,
+      );
+    },
+  );
+
+  registerTool(
+    server,
+    config,
+    "create_dataset_bundle_export",
+    {
+      title: "Create Dataset Bundle Export",
+      description:
+        "POST /accounts/:account_id/datasets/:dataset_id/bundle_exports. Scope: run:dataset_bundle_exports.",
+      inputSchema: accountOptional.extend({
+        dataset_id: z.union([z.string(), z.number()]),
+        idempotency_key: z.string().optional(),
+      }),
+    },
+    async (args, request) => {
+      const accountId = normalizeAccountId(args.account_id);
+      return request(
+        "POST",
+        `/accounts/${accountId}/datasets/${String(args.dataset_id)}/bundle_exports`,
+        {},
+        {
+          bundleExport: {
+            idempotencyKey: args.idempotency_key,
+          },
+        },
+        accountId,
+      );
+    },
+  );
+
+  registerTool(
+    server,
+    config,
+    "get_dataset_bundle_export",
+    {
+      title: "Get Dataset Bundle Export",
+      description:
+        "GET /accounts/:account_id/datasets/:dataset_id/bundle_exports/:id. Scope: run:dataset_bundle_exports.",
+      inputSchema: accountOptional.extend({
+        dataset_id: z.union([z.string(), z.number()]),
+        bundle_export_id: z.union([z.string(), z.number()]),
+      }),
+    },
+    async (args, request) => {
+      const accountId = normalizeAccountId(args.account_id);
+      return request(
+        "GET",
+        `/accounts/${accountId}/datasets/${String(args.dataset_id)}/bundle_exports/${String(args.bundle_export_id)}`,
         {},
         undefined,
         accountId,

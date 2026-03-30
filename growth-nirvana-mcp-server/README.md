@@ -87,6 +87,8 @@ Async run tools:
 - `get_dry_run(account_id, dry_run_id)`
 - `install_all_paid_pro(account_id, connector_id, dataset_display_name, package_version_id?, dataset_name?, name_suffix?, hotglue_dataset?, stream_token?, idempotency_key?)`
 - `get_package_install(account_id, package_install_id)`
+- `create_dataset_bundle_export(account_id, dataset_id, idempotency_key?)`
+- `get_dataset_bundle_export(account_id, dataset_id, bundle_export_id)`
 
 ## Scopes
 
@@ -102,6 +104,7 @@ Scopes expected by the tools:
 - `run:query_executions`
 - `run:dry_runs`
 - `run:packages`
+- `run:dataset_bundle_exports`
 - `read:*` and `*` wildcard support is server-side
 - `run:*` wildcard support is server-side
 

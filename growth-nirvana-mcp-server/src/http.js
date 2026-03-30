@@ -156,8 +156,15 @@ export async function railsRequest({
       const { code, message, errors } = parseRailsError(parsedBody);
 
       if (!response.ok) {
+        const fallbackMessage =
+          typeof text === "string" && text.trim().length > 0
+            ? text.trim()
+            : "Request failed";
+        const effectiveMessage =
+          message && message !== "Request failed" ? message : fallbackMessage;
+
         console.error(
-          `[growth-nirvana-mcp] url=${url} account_id=${accountId} status=${response.status} error_code=${code} error_message=${message}`,
+          `[growth-nirvana-mcp] url=${url} account_id=${accountId} status=${response.status} error_code=${code} error_message=${effectiveMessage}`,
         );
 
         if (shouldRetry(response.status) && attempt <= maxRetries) {
@@ -166,11 +173,12 @@ export async function railsRequest({
           continue;
         }
 
-        const err = new Error(message);
+        const err = new Error(effectiveMessage);
         err.name = "RailsApiError";
         err.status = response.status;
         err.code = code;
         err.errors = errors;
+        err.raw_body = text;
         err.url = url;
         throw err;
       }
@@ -222,6 +230,7 @@ export function toToolError(error) {
               status_hint: statusHint,
               code,
               message,
+              raw_body: error?.raw_body || null,
             },
           },
           null,

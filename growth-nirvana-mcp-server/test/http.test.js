@@ -31,6 +31,17 @@ test("toToolError maps 401/403/422 status hints", () => {
   assert.match(validationError.content[0].text, /invalid_request_params/);
 });
 
+test("toToolError includes raw response body when present", () => {
+  const toolError = toToolError({
+    status: 400,
+    code: "unknown_error",
+    message: "Bad Request",
+    raw_body: "ActionController::ParameterMissing",
+  });
+
+  assert.match(toolError.content[0].text, /ActionController::ParameterMissing/);
+});
+
 test("railsGet does not retry 401 auth failures", async () => {
   let calls = 0;
   globalThis.fetch = async () => {
