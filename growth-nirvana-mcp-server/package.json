@@ -4,6 +4,9 @@
   "description": "External MCP server for Growth Nirvana Rails read APIs",
   "type": "module",
   "main": "src/server.js",
+  "bin": {
+    "growth-nirvana-mcp-server": "./src/server.js"
+  },
   "scripts": {
     "start": "node src/server.js",
     "check": "node --check src/server.js",
