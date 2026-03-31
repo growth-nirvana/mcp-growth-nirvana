@@ -1,4 +1,6 @@
 #!/usr/bin/env node
+import fs from "node:fs";
+import { fileURLToPath } from "node:url";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import { z } from "zod";
@@ -998,6 +1000,18 @@ export async function startServer() {
   await server.connect(transport);
 }
 
-if (process.argv[1] === new URL(import.meta.url).pathname) {
+function isExecutedDirectly() {
+  if (!process.argv[1]) return false;
+
+  try {
+    const invokedPath = fs.realpathSync(process.argv[1]);
+    const modulePath = fs.realpathSync(fileURLToPath(import.meta.url));
+    return invokedPath === modulePath;
+  } catch {
+    return false;
+  }
+}
+
+if (isExecutedDirectly()) {
   await startServer();
 }
