@@ -182,6 +182,30 @@ test("railsGet serializes pagination and updated_since query params", async () =
   assert.equal(authHeader, "Bearer secret");
 });
 
+test("railsGet forwards OAuth bearer token without API key header", async () => {
+  let authHeader = "";
+  let apiKeyHeader = "unset";
+  globalThis.fetch = async (_url, options) => {
+    authHeader = options.headers.Authorization;
+    apiKeyHeader = options.headers["X-API-Key"];
+    return jsonResponse(200, { data: [], meta: { page: 1, per_page: 20, total: 0 }, errors: [] });
+  };
+
+  await railsGet({
+    baseUrl: "https://example.com/api/v1/mcp",
+    authMode: "oauth",
+    oauthBearerToken: "oauth-token",
+    path: "/accounts/self/datasets",
+    params: {},
+    accountId: "self",
+    timeoutMs: 1000,
+    maxRetries: 0,
+  });
+
+  assert.equal(authHeader, "Bearer oauth-token");
+  assert.equal(apiKeyHeader, undefined);
+});
+
 test("railsGet preserves /api/v1/mcp base path for leading-slash routes", async () => {
   let urlSeen = "";
   globalThis.fetch = async (url) => {

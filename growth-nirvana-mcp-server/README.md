@@ -1,6 +1,6 @@
 # Growth Nirvana Rails MCP Server
 
-External MCP server for account-scoped, API-key-protected read endpoints backed by Growth Nirvana Rails.
+External MCP server for Growth Nirvana Rails MCP endpoints. It supports a hosted Claude connector over Streamable HTTP with user-delegated OAuth, while preserving the existing API-key mode for BFF/server-to-server workflows.
 
 ## Requirements
 
@@ -16,8 +16,12 @@ pnpm install
 
 Environment variables:
 
-- `GROWTH_NIRVANA_API_KEY` (required): plaintext key issued by `APIClientKey.issue!`
-- `GROWTH_NIRVANA_BASE_URL` (optional): Rails host URL (default `https://app.growthnirvana.com`)
+- `MCP_AUTH_MODE` (optional, default `internal`): set to `oauth` for the hosted Claude connector.
+- `GN_RAILS_BASE_URL` (optional): Rails host URL (default `https://app.growthnirvana.com`).
+- `MCP_PUBLIC_BASE_URL` (optional): public MCP server origin for OAuth metadata (default `http://localhost:3000`).
+- `MCP_RESOURCE_PATH` (optional): public MCP resource path (default `/mcp`).
+- `GN_INTERNAL_API_KEY` (required for internal mode): plaintext key issued by `APIClientKey.issue!`.
+- `GROWTH_NIRVANA_API_KEY` and `GROWTH_NIRVANA_BASE_URL` remain supported as legacy fallbacks.
   - The server automatically appends `/api/v1/mcp` if missing.
 - `GROWTH_NIRVANA_TIMEOUT_MS` (optional, default `15000`)
 - `GROWTH_NIRVANA_MAX_RETRIES` (optional, default `3`)
@@ -26,13 +30,43 @@ Environment variables:
 
 ```bash
 pnpm start
+pnpm start:http
 pnpm check
 pnpm test
 ```
 
-## Auth and key behavior
+`pnpm start` runs the existing stdio server. `pnpm start:http` runs the Streamable HTTP server locally on `PORT` or `3000`.
 
-Each request sends:
+## Hosted Claude OAuth Flow
+
+For Claude, deploy the HTTP entrypoint and set:
+
+```text
+MCP_AUTH_MODE=oauth
+GN_RAILS_BASE_URL=https://app.growthnirvana.com
+MCP_PUBLIC_BASE_URL=https://mcp.growthnirvana.com
+MCP_RESOURCE_PATH=/mcp
+```
+
+The server exposes:
+
+- `POST /mcp`
+- `GET /.well-known/oauth-protected-resource`
+- `GET /.well-known/oauth-protected-resource/mcp`
+
+Unauthenticated MCP requests return `401` with:
+
+```http
+WWW-Authenticate: Bearer resource_metadata="https://mcp.growthnirvana.com/.well-known/oauth-protected-resource/mcp"
+```
+
+Claude discovers Growth Nirvana Rails from the protected-resource metadata, completes the Doorkeeper authorization-code + PKCE flow there, then calls this MCP server with `Authorization: Bearer <oauth_access_token>`. The MCP server forwards that bearer token to Rails MCP endpoints and does not store user tokens.
+
+Rails must also expose authorization-server metadata at `GET /.well-known/oauth-authorization-server` and enforce OAuth activity, scopes, account binding, and revocation.
+
+## Internal API-key behavior
+
+In the default `internal` auth mode, each Rails request sends:
 
 - `Authorization: Bearer <api_key>` (preferred)
 - `X-API-Key: <api_key>`
@@ -42,6 +76,12 @@ Key semantics enforced by Rails:
 - master key: can operate across accounts
 - client key: restricted to its own account
 - account-scoped tools support `account_id="self"` (default when omitted)
+
+## Vercel deployment
+
+This package includes a Vercel serverless entrypoint at `api/mcp.js` and rewrites in `vercel.json` for `/mcp` plus the well-known OAuth metadata paths.
+
+Use Streamable HTTP as the primary transport on Vercel. The implementation is stateless, creates request-scoped MCP transport state, uses JSON responses, and does not use in-memory user sessions or durable OAuth token storage. Avoid SSE-first deployments on Vercel unless you add deliberate external state/resumability support.
 
 ## Tool set
 

@@ -39,9 +39,26 @@ function shouldRetry(status) {
   return RETRYABLE_STATUS.has(status);
 }
 
+function buildAuthHeaders({ authMode, apiKey, oauthBearerToken }) {
+  const headers = {
+    Accept: "application/json",
+  };
+
+  if (authMode === "oauth") {
+    headers.Authorization = `Bearer ${oauthBearerToken}`;
+    return headers;
+  }
+
+  headers.Authorization = `Bearer ${apiKey}`;
+  headers["X-API-Key"] = apiKey;
+  return headers;
+}
+
 export async function railsGet({
   baseUrl,
+  authMode,
   apiKey,
+  oauthBearerToken,
   path,
   params,
   accountId,
@@ -52,7 +69,9 @@ export async function railsGet({
   return railsRequest({
     method: "GET",
     baseUrl,
+    authMode,
     apiKey,
+    oauthBearerToken,
     path,
     params,
     accountId,
@@ -64,7 +83,9 @@ export async function railsGet({
 
 export async function railsPost({
   baseUrl,
+  authMode,
   apiKey,
+  oauthBearerToken,
   path,
   params,
   body,
@@ -76,7 +97,9 @@ export async function railsPost({
   return railsRequest({
     method: "POST",
     baseUrl,
+    authMode,
     apiKey,
+    oauthBearerToken,
     path,
     params,
     body,
@@ -89,7 +112,9 @@ export async function railsPost({
 
 export async function railsPatch({
   baseUrl,
+  authMode,
   apiKey,
+  oauthBearerToken,
   path,
   params,
   body,
@@ -101,7 +126,9 @@ export async function railsPatch({
   return railsRequest({
     method: "PATCH",
     baseUrl,
+    authMode,
     apiKey,
+    oauthBearerToken,
     path,
     params,
     body,
@@ -115,7 +142,9 @@ export async function railsPatch({
 export async function railsRequest({
   method,
   baseUrl,
+  authMode = "internal",
   apiKey,
+  oauthBearerToken,
   path,
   params,
   body: requestBody,
@@ -133,11 +162,7 @@ export async function railsRequest({
     const timeout = setTimeout(() => controller.abort(), timeoutMs);
 
     try {
-      const headers = {
-        Authorization: `Bearer ${apiKey}`,
-        "X-API-Key": apiKey,
-        Accept: "application/json",
-      };
+      const headers = buildAuthHeaders({ authMode, apiKey, oauthBearerToken });
       const hasBody = requestBody !== undefined;
       if (hasBody) {
         headers["Content-Type"] = "application/json";
@@ -208,7 +233,9 @@ export function toToolError(error) {
 
   const statusHint =
     status === 401
-      ? "invalid_or_missing_key"
+      ? code === "invalid_token"
+        ? "invalid_token"
+        : "invalid_or_missing_key"
       : status === 403
         ? "scope_or_account_mismatch"
         : status === 404

@@ -51,7 +51,9 @@ function normalizeAccountId(value) {
 async function doRequest(method, path, params, body, accountId) {
   const common = {
     baseUrl: this.baseUrl,
+    authMode: this.authMode,
     apiKey: this.apiKey,
+    oauthBearerToken: this.oauthBearerToken,
     path,
     params,
     body,

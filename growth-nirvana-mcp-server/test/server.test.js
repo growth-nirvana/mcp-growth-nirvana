@@ -87,6 +87,30 @@ test("account-scoped tools default account_id to self", async () => {
   assert.match(urlSeen, /\/accounts\/self\/datasets\?/);
 });
 
+test("oauth tool calls forward request bearer token to Rails", async () => {
+  const server = createServer({
+    baseUrl: "https://example.com/api/v1/mcp",
+    authMode: "oauth",
+    oauthBearerToken: "oauth-token",
+    timeoutMs: 1000,
+    maxRetries: 0,
+  });
+  const tool = server._registeredTools.list_datasets;
+  let authHeader = "";
+  let apiKeyHeader = "unset";
+
+  globalThis.fetch = async (_url, options) => {
+    authHeader = options.headers.Authorization;
+    apiKeyHeader = options.headers["X-API-Key"];
+    return jsonResponse(200, { data: [], meta: { page: 1, per_page: 25, total: 0 }, errors: [] });
+  };
+
+  await tool.handler({ page: 1, per_page: 25 });
+
+  assert.equal(authHeader, "Bearer oauth-token");
+  assert.equal(apiKeyHeader, undefined);
+});
+
 test("search_transformation_models maps endpoint and preserves combined payload", async () => {
   const server = buildServer();
   const tool = server._registeredTools.search_transformation_models;

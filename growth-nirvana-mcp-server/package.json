@@ -1,6 +1,6 @@
 {
   "name": "growth-nirvana-mcp-server",
-  "version": "1.0.1",
+  "version": "1.0.2",
   "description": "External MCP server for Growth Nirvana Rails read APIs",
   "type": "module",
   "main": "src/server.js",
@@ -9,7 +9,8 @@
   },
   "scripts": {
     "start": "node src/server.js",
-    "check": "node --check src/server.js",
+    "start:http": "node src/http-server.js",
+    "check": "node --check src/server.js && node --check src/http-server.js && node --check src/config.js && node --check src/http.js && node --check src/oauth.js && node --check api/mcp.js",
     "test": "node --test"
   },
   "keywords": [],
