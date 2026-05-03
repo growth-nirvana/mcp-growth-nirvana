@@ -1,0 +1,14 @@
+{
+  "name": "mcp-growth-nirvana",
+  "private": true,
+  "type": "module",
+  "packageManager": "pnpm@10.31.0",
+  "scripts": {
+    "check": "pnpm --dir growth-nirvana-mcp-server check && node --check api/mcp.js",
+    "test": "pnpm --dir growth-nirvana-mcp-server test"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.27.1",
+    "zod": "^4.3.6"
+  }
+}
