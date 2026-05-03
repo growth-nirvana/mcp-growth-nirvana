@@ -43,7 +43,8 @@ function toToolSuccess(body) {
   };
 }
 
-function normalizeAccountId(value) {
+function normalizeAccountId(value, config) {
+  if (config?.authMode === "oauth") return "self";
   if (value === undefined || value === null || value === "") return "self";
   return String(value);
 }
@@ -69,8 +70,11 @@ async function doRequest(method, path, params, body, accountId) {
 function registerTool(server, config, name, meta, handler) {
   server.registerTool(name, meta, async (args) => {
     try {
-      const body = await handler(args, async (method, path, params, reqBody, accountId) =>
-        doRequest.call(config, method, path, params, reqBody, accountId),
+      const body = await handler(
+        args,
+        async (method, path, params, reqBody, accountId) =>
+          doRequest.call(config, method, path, params, reqBody, accountId),
+        config,
       );
       return toToolSuccess(body);
     } catch (error) {
@@ -113,7 +117,7 @@ export function createServer(config) {
       }),
     },
     async (args, request) => {
-      const accountId = normalizeAccountId(args.account_id);
+      const accountId = normalizeAccountId(args.account_id, config);
       return request(
         "GET",
         `/accounts/${accountId}/connectors`,
@@ -141,7 +145,7 @@ export function createServer(config) {
       inputSchema: accountOptional.extend({ connector_id: z.string().min(1) }),
     },
     async (args, request) => {
-      const accountId = normalizeAccountId(args.account_id);
+      const accountId = normalizeAccountId(args.account_id, config);
       return request(
         "GET",
         `/accounts/${accountId}/connectors/${String(args.connector_id)}`,
@@ -167,7 +171,7 @@ export function createServer(config) {
       }),
     },
     async (args, request) => {
-      const accountId = normalizeAccountId(args.account_id);
+      const accountId = normalizeAccountId(args.account_id, config);
       return request(
         "GET",
         `/accounts/${accountId}/datasets`,
@@ -201,7 +205,7 @@ export function createServer(config) {
       }),
     },
     async (args, request) => {
-      const accountId = normalizeAccountId(args.account_id);
+      const accountId = normalizeAccountId(args.account_id, config);
       return request(
         "GET",
         `/accounts/${accountId}/datasets/search`,
@@ -233,7 +237,7 @@ export function createServer(config) {
       }),
     },
     async (args, request) => {
-      const accountId = normalizeAccountId(args.account_id);
+      const accountId = normalizeAccountId(args.account_id, config);
       return request(
         "GET",
         `/accounts/${accountId}/datasets/${String(args.dataset_id)}`,
@@ -258,7 +262,7 @@ export function createServer(config) {
       }),
     },
     async (args, request) => {
-      const accountId = normalizeAccountId(args.account_id);
+      const accountId = normalizeAccountId(args.account_id, config);
       return request(
         "GET",
         `/accounts/${accountId}/warehouse_tables`,
@@ -290,7 +294,7 @@ export function createServer(config) {
       }),
     },
     async (args, request) => {
-      const accountId = normalizeAccountId(args.account_id);
+      const accountId = normalizeAccountId(args.account_id, config);
       return request(
         "GET",
         `/accounts/${accountId}/warehouse_tables/search`,
@@ -314,7 +318,7 @@ export function createServer(config) {
       }),
     },
     async (args, request) => {
-      const accountId = normalizeAccountId(args.account_id);
+      const accountId = normalizeAccountId(args.account_id, config);
       return request(
         "GET",
         `/accounts/${accountId}/warehouse_tables/${String(args.warehouse_table_id)}`,
@@ -340,7 +344,7 @@ export function createServer(config) {
       }),
     },
     async (args, request) => {
-      const accountId = normalizeAccountId(args.account_id);
+      const accountId = normalizeAccountId(args.account_id, config);
       return request(
         "GET",
         `/accounts/${accountId}/datasets/${String(args.dataset_id)}/warehouse_tables`,
@@ -371,7 +375,7 @@ export function createServer(config) {
       }),
     },
     async (args, request) => {
-      const accountId = normalizeAccountId(args.account_id);
+      const accountId = normalizeAccountId(args.account_id, config);
       return request(
         "GET",
         `/accounts/${accountId}/datasets/${String(args.dataset_id)}/warehouse_tables/${String(args.warehouse_table_id)}`,
@@ -396,7 +400,7 @@ export function createServer(config) {
       }),
     },
     async (args, request) => {
-      const accountId = normalizeAccountId(args.account_id);
+      const accountId = normalizeAccountId(args.account_id, config);
       return request(
         "GET",
         `/accounts/${accountId}/warehouse_fields`,
@@ -428,7 +432,7 @@ export function createServer(config) {
       }),
     },
     async (args, request) => {
-      const accountId = normalizeAccountId(args.account_id);
+      const accountId = normalizeAccountId(args.account_id, config);
       return request(
         "GET",
         `/accounts/${accountId}/warehouse_fields/search`,
@@ -452,7 +456,7 @@ export function createServer(config) {
       }),
     },
     async (args, request) => {
-      const accountId = normalizeAccountId(args.account_id);
+      const accountId = normalizeAccountId(args.account_id, config);
       return request(
         "GET",
         `/accounts/${accountId}/warehouse_fields/${String(args.warehouse_field_id)}`,
@@ -480,7 +484,7 @@ export function createServer(config) {
       }),
     },
     async (args, request) => {
-      const accountId = normalizeAccountId(args.account_id);
+      const accountId = normalizeAccountId(args.account_id, config);
       return request(
         "GET",
         `/accounts/${accountId}/datasets/${String(args.dataset_id)}/warehouse_tables/${String(args.warehouse_table_id)}/warehouse_fields`,
@@ -513,7 +517,7 @@ export function createServer(config) {
       }),
     },
     async (args, request) => {
-      const accountId = normalizeAccountId(args.account_id);
+      const accountId = normalizeAccountId(args.account_id, config);
       return request(
         "GET",
         `/accounts/${accountId}/datasets/${String(args.dataset_id)}/warehouse_tables/${String(args.warehouse_table_id)}/warehouse_fields/${String(args.warehouse_field_id)}`,
@@ -538,7 +542,7 @@ export function createServer(config) {
       }),
     },
     async (args, request) => {
-      const accountId = normalizeAccountId(args.account_id);
+      const accountId = normalizeAccountId(args.account_id, config);
       return request(
         "GET",
         `/accounts/${accountId}/datasets/${String(args.dataset_id)}/transformation_models`,
@@ -567,7 +571,7 @@ export function createServer(config) {
       }),
     },
     async (args, request) => {
-      const accountId = normalizeAccountId(args.account_id);
+      const accountId = normalizeAccountId(args.account_id, config);
       return request(
         "GET",
         `/accounts/${accountId}/datasets/${String(args.dataset_id)}/transformation_models/${String(args.transformation_model_id)}`,
@@ -593,7 +597,7 @@ export function createServer(config) {
       }),
     },
     async (args, request) => {
-      const accountId = normalizeAccountId(args.account_id);
+      const accountId = normalizeAccountId(args.account_id, config);
       return request(
         "GET",
         `/accounts/${accountId}/transformation_models`,
@@ -621,7 +625,7 @@ export function createServer(config) {
       }),
     },
     async (args, request) => {
-      const accountId = normalizeAccountId(args.account_id);
+      const accountId = normalizeAccountId(args.account_id, config);
       return request(
         "GET",
         `/accounts/${accountId}/transformation_models/${String(args.transformation_model_id)}`,
@@ -648,7 +652,7 @@ export function createServer(config) {
       }),
     },
     async (args, request) => {
-      const accountId = normalizeAccountId(args.account_id);
+      const accountId = normalizeAccountId(args.account_id, config);
       return request(
         "GET",
         `/accounts/${accountId}/transformation_models/search`,
@@ -681,7 +685,7 @@ export function createServer(config) {
       }),
     },
     async (args, request) => {
-      const accountId = normalizeAccountId(args.account_id);
+      const accountId = normalizeAccountId(args.account_id, config);
       return request(
         "GET",
         `/accounts/${accountId}/data_transformations`,
@@ -708,7 +712,7 @@ export function createServer(config) {
       inputSchema: accountOptional.extend({ data_transformation_id: z.union([z.string(), z.number()]) }),
     },
     async (args, request) => {
-      const accountId = normalizeAccountId(args.account_id);
+      const accountId = normalizeAccountId(args.account_id, config);
       return request(
         "GET",
         `/accounts/${accountId}/data_transformations/${String(args.data_transformation_id)}`,
@@ -729,7 +733,7 @@ export function createServer(config) {
       inputSchema: accountOptional.extend({ dataset_id: z.union([z.string(), z.number()]) }),
     },
     async (args, request) => {
-      const accountId = normalizeAccountId(args.account_id);
+      const accountId = normalizeAccountId(args.account_id, config);
       return request(
         "GET",
         `/accounts/${accountId}/datasets/${String(args.dataset_id)}/client_dataset_config`,
@@ -754,7 +758,7 @@ export function createServer(config) {
       }),
     },
     async (args, request) => {
-      const accountId = normalizeAccountId(args.account_id);
+      const accountId = normalizeAccountId(args.account_id, config);
       return request(
         "POST",
         `/accounts/${accountId}/query_executions`,
@@ -786,7 +790,7 @@ export function createServer(config) {
       }),
     },
     async (args, request) => {
-      const accountId = normalizeAccountId(args.account_id);
+      const accountId = normalizeAccountId(args.account_id, config);
       return request(
         "GET",
         `/accounts/${accountId}/query_executions/${String(args.query_execution_id)}`,
@@ -811,7 +815,7 @@ export function createServer(config) {
       inputSchema: accountOptional.extend({ query_execution_id: z.union([z.string(), z.number()]) }),
     },
     async (args, request) => {
-      const accountId = normalizeAccountId(args.account_id);
+      const accountId = normalizeAccountId(args.account_id, config);
       return request(
         "PATCH",
         `/accounts/${accountId}/query_executions/${String(args.query_execution_id)}/cancel`,
@@ -841,7 +845,7 @@ export function createServer(config) {
       }),
     },
     async (args, request) => {
-      const accountId = normalizeAccountId(args.account_id);
+      const accountId = normalizeAccountId(args.account_id, config);
       return request(
         "POST",
         `/accounts/${accountId}/dry_runs`,
@@ -873,7 +877,7 @@ export function createServer(config) {
       inputSchema: accountOptional.extend({ dry_run_id: z.union([z.string(), z.number()]) }),
     },
     async (args, request) => {
-      const accountId = normalizeAccountId(args.account_id);
+      const accountId = normalizeAccountId(args.account_id, config);
       return request("GET", `/accounts/${accountId}/dry_runs/${String(args.dry_run_id)}`, {}, undefined, accountId);
     },
   );
@@ -897,7 +901,7 @@ export function createServer(config) {
       }),
     },
     async (args, request) => {
-      const accountId = normalizeAccountId(args.account_id);
+      const accountId = normalizeAccountId(args.account_id, config);
       return request(
         "POST",
         `/accounts/${accountId}/packages/all_paid_pro/install`,
@@ -927,7 +931,7 @@ export function createServer(config) {
       inputSchema: accountOptional.extend({ package_install_id: z.union([z.string(), z.number()]) }),
     },
     async (args, request) => {
-      const accountId = normalizeAccountId(args.account_id);
+      const accountId = normalizeAccountId(args.account_id, config);
       return request(
         "GET",
         `/accounts/${accountId}/package_installs/${String(args.package_install_id)}`,
@@ -952,7 +956,7 @@ export function createServer(config) {
       }),
     },
     async (args, request) => {
-      const accountId = normalizeAccountId(args.account_id);
+      const accountId = normalizeAccountId(args.account_id, config);
       return request(
         "POST",
         `/accounts/${accountId}/datasets/${String(args.dataset_id)}/bundle_exports`,
@@ -981,7 +985,7 @@ export function createServer(config) {
       }),
     },
     async (args, request) => {
-      const accountId = normalizeAccountId(args.account_id);
+      const accountId = normalizeAccountId(args.account_id, config);
       return request(
         "GET",
         `/accounts/${accountId}/datasets/${String(args.dataset_id)}/bundle_exports/${String(args.bundle_export_id)}`,

@@ -111,6 +111,27 @@ test("oauth tool calls forward request bearer token to Rails", async () => {
   assert.equal(apiKeyHeader, undefined);
 });
 
+test("oauth account-scoped tools force account_id to self", async () => {
+  const server = createServer({
+    baseUrl: "https://example.com/api/v1/mcp",
+    authMode: "oauth",
+    oauthBearerToken: "oauth-token",
+    timeoutMs: 1000,
+    maxRetries: 0,
+  });
+  const tool = server._registeredTools.list_datasets;
+  let urlSeen = "";
+
+  globalThis.fetch = async (url) => {
+    urlSeen = url;
+    return jsonResponse(200, { data: [], meta: { page: 1, per_page: 25, total: 0 }, errors: [] });
+  };
+
+  await tool.handler({ account_id: "42", page: 1, per_page: 25 });
+
+  assert.match(urlSeen, /\/accounts\/self\/datasets\?/);
+});
+
 test("search_transformation_models maps endpoint and preserves combined payload", async () => {
   const server = buildServer();
   const tool = server._registeredTools.search_transformation_models;
