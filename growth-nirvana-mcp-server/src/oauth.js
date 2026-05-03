@@ -2,6 +2,7 @@ export const MCP_SCOPES = [
   "read:accounts",
   "read:connectors",
   "read:datasets",
+  "read:dataset_contexts",
   "read:warehouse_tables",
   "read:transformation_models",
   "read:data_transformations",
@@ -11,6 +12,7 @@ export const MCP_SCOPES = [
   "run:data_transformation_executions",
   "run:packages",
   "run:dataset_bundle_exports",
+  "write:dataset_contexts",
   "write:hotglue_connections",
 ];
 

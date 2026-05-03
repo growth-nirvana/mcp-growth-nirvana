@@ -26,6 +26,11 @@ test("registers new account/model/config tools", () => {
   const tools = Object.keys(server._registeredTools || {});
 
   assert.ok(tools.includes("search_accounts"));
+  assert.ok(tools.includes("browse_dataset_contexts"));
+  assert.ok(tools.includes("search_dataset_contexts"));
+  assert.ok(tools.includes("get_dataset_context"));
+  assert.ok(tools.includes("suggest_dataset_context"));
+  assert.ok(tools.includes("update_dataset_context"));
   assert.ok(tools.includes("search_datasets"));
   assert.ok(tools.includes("search_warehouse_fields"));
   assert.ok(tools.includes("list_warehouse_tables"));
@@ -440,4 +445,65 @@ test("dataset bundle export tools map create/get endpoints", async () => {
     requests[1].url,
     /\/accounts\/self\/datasets\/42\/bundle_exports\/555$/,
   );
+});
+
+test("dataset context tools map discovery and context endpoints", async () => {
+  const server = buildServer();
+  const browseTool = server._registeredTools.browse_dataset_contexts;
+  const searchTool = server._registeredTools.search_dataset_contexts;
+  const getTool = server._registeredTools.get_dataset_context;
+  const suggestTool = server._registeredTools.suggest_dataset_context;
+  const updateTool = server._registeredTools.update_dataset_context;
+  const requests = [];
+
+  globalThis.fetch = async (url, options = {}) => {
+    requests.push({
+      url,
+      method: options.method || "GET",
+      body: options.body ? JSON.parse(options.body) : null,
+    });
+    return jsonResponse(200, { data: { id: 123 }, errors: [] });
+  };
+
+  await browseTool.handler({
+    page: 1,
+    perPage: 10,
+    includeReporting: true,
+    includeAdClientDatasets: true,
+  });
+  await searchTool.handler({ q: "Deepgram performance", page: 2, perPage: 5 });
+  await getTool.handler({ datasetId: 123 });
+  await suggestTool.handler({ datasetId: 123 });
+  await updateTool.handler({
+    datasetId: 123,
+    datasetContext: {
+      visibility: "featured",
+      priority: 100,
+      summary: "Primary paid media performance dataset for Deepgram.",
+      contextMarkdown: "## When to use this dataset\nUse this for Deepgram paid media performance.",
+      tags: ["deepgram", "paid_media"],
+      recommendedQuestions: ["How did performance change week over week?"],
+      caveats: "Use complete weeks for comparisons.",
+      lastEditedBy: "assistant",
+    },
+  });
+
+  assert.match(
+    requests[0].url,
+    /\/accounts\/self\/dataset_contexts\?page=1&per_page=10&include_reporting=true&include_ad_client_datasets=true$/,
+  );
+  assert.equal(requests[0].method, "GET");
+  assert.match(
+    requests[1].url,
+    /\/accounts\/self\/dataset_contexts\/search\?q=Deepgram\+performance&page=2&per_page=5$/,
+  );
+  assert.equal(requests[1].method, "GET");
+  assert.match(requests[2].url, /\/accounts\/self\/datasets\/123\/context$/);
+  assert.equal(requests[2].method, "GET");
+  assert.match(requests[3].url, /\/accounts\/self\/datasets\/123\/context\/suggestions$/);
+  assert.equal(requests[3].method, "POST");
+  assert.deepEqual(requests[3].body, {});
+  assert.match(requests[4].url, /\/accounts\/self\/datasets\/123\/context$/);
+  assert.equal(requests[4].method, "PATCH");
+  assert.equal(requests[4].body.datasetContext.lastEditedBy, "assistant");
 });

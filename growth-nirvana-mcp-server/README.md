@@ -91,6 +91,11 @@ Master discovery tool:
 
 Search and account-scoped tools:
 
+- `browse_dataset_contexts(page?, perPage?, includeReporting?, includeAdClientDatasets?)`
+- `search_dataset_contexts(q, page?, perPage?)`
+- `get_dataset_context(datasetId)`
+- `suggest_dataset_context(datasetId)`
+- `update_dataset_context(datasetId, datasetContext)` requires explicit user approval before use
 - `list_connectors(account_id, provider?, q?, status?, updated_since?, page?, per_page?)`
 - `get_connector(account_id, connector_id)`
 - `search_datasets(account_id, q, page?, per_page?, updated_since?, type?, enabled?)`
@@ -136,6 +141,7 @@ Scopes expected by the tools:
 
 - `read:accounts` (for `search_accounts`; master key flow)
 - `read:datasets`
+- `read:dataset_contexts`
 - `read:warehouse_tables`
 - `read:connectors`
 - `read:transformation_models`
@@ -145,8 +151,15 @@ Scopes expected by the tools:
 - `run:dry_runs`
 - `run:packages`
 - `run:dataset_bundle_exports`
+- `write:dataset_contexts`
 - `read:*` and `*` wildcard support is server-side
 - `run:*` wildcard support is server-side
+
+## Dataset context workflow
+
+Prefer `browse_dataset_contexts` and `search_dataset_contexts` before raw `list_datasets` when Claude needs to discover the right dataset for a user question. After selecting a likely dataset, use `get_dataset_context` to fetch full markdown guidance.
+
+`suggest_dataset_context` drafts context without saving it. `update_dataset_context` persists changes in Rails and should only be called after explicit user approval.
 
 ## Response and error handling
 

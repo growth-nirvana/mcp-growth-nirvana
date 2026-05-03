@@ -15,6 +15,10 @@ const pagingFields = {
   per_page: z.number().int().positive().optional(),
   updated_since: z.string().optional(),
 };
+const contextPagingFields = {
+  page: z.number().int().positive().optional(),
+  perPage: z.number().int().positive().optional(),
+};
 
 const datasetInclude = z
   .string()
@@ -30,6 +34,16 @@ const fieldInclude = z
   .string()
   .regex(/^(warehouse_table|dataset)(,(warehouse_table|dataset))*$/)
   .optional();
+const datasetContextPayload = z.object({
+  visibility: z.enum(["hidden", "normal", "featured"]).optional(),
+  priority: z.number().int().optional(),
+  summary: z.string().optional(),
+  contextMarkdown: z.string().optional(),
+  tags: z.array(z.string()).optional(),
+  recommendedQuestions: z.array(z.string()).optional(),
+  caveats: z.string().optional(),
+  lastEditedBy: z.enum(["assistant", "user", "system"]).optional(),
+});
 
 function toToolSuccess(body) {
   const payload = {
@@ -100,6 +114,161 @@ export function createServer(config) {
     },
     async (args, request) =>
       request("GET", "/accounts/search", { q: args.q, page: args.page, per_page: args.per_page }, undefined, "global"),
+  );
+
+  registerTool(
+    server,
+    config,
+    "browse_dataset_contexts",
+    {
+      title: "Browse Dataset Contexts",
+      description:
+        "Browse compact dataset context catalog rows before raw dataset listing. Scope: read:datasets read:dataset_contexts.",
+      inputSchema: z.object({
+        ...contextPagingFields,
+        includeReporting: z.boolean().optional(),
+        includeAdClientDatasets: z.boolean().optional(),
+      }),
+      annotations: {
+        readOnlyHint: true,
+        destructiveHint: false,
+        idempotentHint: true,
+        openWorldHint: true,
+      },
+    },
+    async (args, request, toolConfig) => {
+      const accountId = normalizeAccountId(undefined, toolConfig);
+      return request(
+        "GET",
+        `/accounts/${accountId}/dataset_contexts`,
+        {
+          page: args.page,
+          per_page: args.perPage,
+          include_reporting: args.includeReporting,
+          include_ad_client_datasets: args.includeAdClientDatasets,
+        },
+        undefined,
+        accountId,
+      );
+    },
+  );
+
+  registerTool(
+    server,
+    config,
+    "search_dataset_contexts",
+    {
+      title: "Search Dataset Contexts",
+      description:
+        "Search dataset contexts by client, source, purpose, table concept, or business question. Scope: read:datasets read:dataset_contexts.",
+      inputSchema: z.object({
+        q: z.string().min(1),
+        ...contextPagingFields,
+      }),
+      annotations: {
+        readOnlyHint: true,
+        destructiveHint: false,
+        idempotentHint: true,
+        openWorldHint: true,
+      },
+    },
+    async (args, request, toolConfig) => {
+      const accountId = normalizeAccountId(undefined, toolConfig);
+      return request(
+        "GET",
+        `/accounts/${accountId}/dataset_contexts/search`,
+        { q: args.q, page: args.page, per_page: args.perPage },
+        undefined,
+        accountId,
+      );
+    },
+  );
+
+  registerTool(
+    server,
+    config,
+    "get_dataset_context",
+    {
+      title: "Get Dataset Context",
+      description:
+        "Fetch full markdown context after choosing a likely dataset. Scope: read:datasets read:dataset_contexts.",
+      inputSchema: z.object({ datasetId: z.union([z.string(), z.number()]) }),
+      annotations: {
+        readOnlyHint: true,
+        destructiveHint: false,
+        idempotentHint: true,
+        openWorldHint: true,
+      },
+    },
+    async (args, request, toolConfig) => {
+      const accountId = normalizeAccountId(undefined, toolConfig);
+      return request(
+        "GET",
+        `/accounts/${accountId}/datasets/${String(args.datasetId)}/context`,
+        {},
+        undefined,
+        accountId,
+      );
+    },
+  );
+
+  registerTool(
+    server,
+    config,
+    "suggest_dataset_context",
+    {
+      title: "Suggest Dataset Context",
+      description:
+        "Draft dataset context from existing metadata without saving. Scope: read:datasets read:dataset_contexts.",
+      inputSchema: z.object({ datasetId: z.union([z.string(), z.number()]) }),
+      annotations: {
+        readOnlyHint: true,
+        destructiveHint: false,
+        idempotentHint: false,
+        openWorldHint: true,
+      },
+    },
+    async (args, request, toolConfig) => {
+      const accountId = normalizeAccountId(undefined, toolConfig);
+      return request(
+        "POST",
+        `/accounts/${accountId}/datasets/${String(args.datasetId)}/context/suggestions`,
+        {},
+        {},
+        accountId,
+      );
+    },
+  );
+
+  registerTool(
+    server,
+    config,
+    "update_dataset_context",
+    {
+      title: "Update Dataset Context",
+      description:
+        "Persist user-approved dataset context changes only after explicit user approval. Scope: write:dataset_contexts.",
+      inputSchema: z.object({
+        datasetId: z.union([z.string(), z.number()]),
+        datasetContext: datasetContextPayload,
+      }),
+      annotations: {
+        readOnlyHint: false,
+        destructiveHint: true,
+        idempotentHint: false,
+        openWorldHint: true,
+      },
+    },
+    async (args, request, toolConfig) => {
+      const accountId = normalizeAccountId(undefined, toolConfig);
+      return request(
+        "PATCH",
+        `/accounts/${accountId}/datasets/${String(args.datasetId)}/context`,
+        {},
+        { datasetContext: args.datasetContext },
+        accountId,
+      );
+    },
   );
 
   registerTool(
