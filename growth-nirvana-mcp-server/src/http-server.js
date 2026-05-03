@@ -49,7 +49,18 @@ export async function handleWebRequest(request, config = getConfig()) {
   const url = new URL(request.url);
 
   if (request.method === "GET" && isProtectedResourceMetadataPath(url.pathname)) {
-    return jsonResponse(protectedResourceMetadata(config));
+    const payload = protectedResourceMetadata(config);
+    console.error(
+      "[growth-nirvana-mcp] protected_resource_metadata_response",
+      JSON.stringify({
+        method: request.method,
+        path: url.pathname,
+        status: 200,
+        userAgent: request.headers.get("user-agent"),
+        payload,
+      }),
+    );
+    return jsonResponse(payload);
   }
 
   if (!isMcpPath(url.pathname, config)) {
