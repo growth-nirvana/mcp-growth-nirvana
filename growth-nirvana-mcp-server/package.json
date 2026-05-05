@@ -1,6 +1,6 @@
 {
   "name": "growth-nirvana-mcp-server",
-  "version": "1.1.0",
+  "version": "1.1.1",
   "description": "External MCP server for Growth Nirvana Rails read APIs",
   "type": "module",
   "main": "src/server.js",
