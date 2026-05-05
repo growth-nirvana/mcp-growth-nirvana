@@ -19,6 +19,12 @@ test("toToolError maps 401/403/422 status hints", () => {
     code: "master_key_required",
     message: "forbidden",
   });
+  const missingScopeError = toToolError({
+    status: 403,
+    code: "missing_scope",
+    message: "Missing required scope: read:dataset_contexts",
+    errors: [{ code: "missing_scope", message: "Missing required scope: read:dataset_contexts" }],
+  });
   const validationError = toToolError({
     status: 422,
     code: "invalid_params",
@@ -28,6 +34,8 @@ test("toToolError maps 401/403/422 status hints", () => {
   assert.equal(authError.isError, true);
   assert.match(authError.content[0].text, /invalid_or_missing_key/);
   assert.match(forbiddenError.content[0].text, /scope_or_account_mismatch/);
+  assert.match(missingScopeError.content[0].text, /"status_hint": "missing_scope"/);
+  assert.match(missingScopeError.content[0].text, /read:dataset_contexts/);
   assert.match(validationError.content[0].text, /invalid_request_params/);
 });
 

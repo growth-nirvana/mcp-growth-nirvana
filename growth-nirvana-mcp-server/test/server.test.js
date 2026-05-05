@@ -472,7 +472,7 @@ test("dataset context tools map discovery and context endpoints", async () => {
     includeAdClientDatasets: true,
   });
   await searchTool.handler({ q: "Deepgram performance", page: 2, perPage: 5 });
-  await getTool.handler({ datasetId: 123 });
+  await getTool.handler({ datasetId: 123, includeSql: true, sqlModels: "combined_report,combined_report_ff" });
   await suggestTool.handler({ datasetId: 123 });
   await updateTool.handler({
     datasetId: 123,
@@ -482,6 +482,12 @@ test("dataset context tools map discovery and context endpoints", async () => {
       summary: "Primary paid media performance dataset for Deepgram.",
       contextMarkdown: "## When to use this dataset\nUse this for Deepgram paid media performance.",
       tags: ["deepgram", "paid_media"],
+      primaryTables: [
+        {
+          name: "combined_report_ff",
+          reason: "Primary full-funnel table for spend and funnel reporting.",
+        },
+      ],
       recommendedQuestions: ["How did performance change week over week?"],
       caveats: "Use complete weeks for comparisons.",
       lastEditedBy: "assistant",
@@ -498,7 +504,10 @@ test("dataset context tools map discovery and context endpoints", async () => {
     /\/accounts\/self\/dataset_contexts\/search\?q=Deepgram\+performance&page=2&per_page=5$/,
   );
   assert.equal(requests[1].method, "GET");
-  assert.match(requests[2].url, /\/accounts\/self\/datasets\/123\/context$/);
+  assert.match(
+    requests[2].url,
+    /\/accounts\/self\/datasets\/123\/context\?include_sql=true&sql_models=combined_report%2Ccombined_report_ff$/,
+  );
   assert.equal(requests[2].method, "GET");
   assert.match(requests[3].url, /\/accounts\/self\/datasets\/123\/context\/suggestions$/);
   assert.equal(requests[3].method, "POST");
@@ -506,4 +515,40 @@ test("dataset context tools map discovery and context endpoints", async () => {
   assert.match(requests[4].url, /\/accounts\/self\/datasets\/123\/context$/);
   assert.equal(requests[4].method, "PATCH");
   assert.equal(requests[4].body.datasetContext.lastEditedBy, "assistant");
+  assert.deepEqual(requests[4].body.datasetContext.primaryTables, [
+    {
+      name: "combined_report_ff",
+      reason: "Primary full-funnel table for spend and funnel reporting.",
+    },
+  ]);
+});
+
+test("oauth dataset context tools use account self", async () => {
+  const server = createServer({
+    baseUrl: "https://example.com/api/v1/mcp",
+    authMode: "oauth",
+    oauthBearerToken: "oauth-token",
+    timeoutMs: 1000,
+    maxRetries: 0,
+  });
+  const getTool = server._registeredTools.get_dataset_context;
+  const updateTool = server._registeredTools.update_dataset_context;
+  const urls = [];
+
+  globalThis.fetch = async (url) => {
+    urls.push(url);
+    return jsonResponse(200, { data: { id: 123 }, errors: [] });
+  };
+
+  await getTool.handler({ datasetId: 123 });
+  await updateTool.handler({
+    datasetId: 123,
+    datasetContext: {
+      visibility: "hidden",
+      lastEditedBy: "assistant",
+    },
+  });
+
+  assert.match(urls[0], /\/accounts\/self\/datasets\/123\/context$/);
+  assert.match(urls[1], /\/accounts\/self\/datasets\/123\/context$/);
 });

@@ -93,7 +93,7 @@ Search and account-scoped tools:
 
 - `browse_dataset_contexts(page?, perPage?, includeReporting?, includeAdClientDatasets?)`
 - `search_dataset_contexts(q, page?, perPage?)`
-- `get_dataset_context(datasetId)`
+- `get_dataset_context(datasetId, includeSql?, sqlModels?)`
 - `suggest_dataset_context(datasetId)`
 - `update_dataset_context(datasetId, datasetContext)` requires explicit user approval before use
 - `list_connectors(account_id, provider?, q?, status?, updated_since?, page?, per_page?)`
@@ -157,9 +157,43 @@ Scopes expected by the tools:
 
 ## Dataset context workflow
 
-Prefer `browse_dataset_contexts` and `search_dataset_contexts` before raw `list_datasets` when Claude needs to discover the right dataset for a user question. After selecting a likely dataset, use `get_dataset_context` to fetch full markdown guidance.
+Rails OpenAPI docs provide endpoint and response shapes at [Growth Nirvana MCP Swagger UI](https://app.growthnirvana.com/api/docs/mcp/index.html). This README documents MCP tool behavior, scope expectations, and agent workflow.
+
+Dataset context scopes:
+
+| Tool | Rails endpoint | Required scopes |
+| --- | --- | --- |
+| `browse_dataset_contexts` | `GET /api/v1/mcp/accounts/self/dataset_contexts` | `read:datasets`, `read:dataset_contexts` |
+| `search_dataset_contexts` | `GET /api/v1/mcp/accounts/self/dataset_contexts/search` | `read:datasets`, `read:dataset_contexts` |
+| `get_dataset_context` | `GET /api/v1/mcp/accounts/self/datasets/:dataset_id/context` | `read:datasets`, `read:dataset_contexts`, `read:warehouse_tables`, `read:transformation_models`, `read:client_dataset_config` |
+| `suggest_dataset_context` | `POST /api/v1/mcp/accounts/self/datasets/:dataset_id/context/suggestions` | `read:datasets`, `read:dataset_contexts` |
+| `update_dataset_context` | `PATCH /api/v1/mcp/accounts/self/datasets/:dataset_id/context` | `write:dataset_contexts` |
+
+Prefer `browse_dataset_contexts` and `search_dataset_contexts` before raw `list_datasets` when Claude needs to discover the right dataset for a user question. After selecting a likely dataset, use `get_dataset_context` to fetch full markdown guidance, table metadata, model lineage, compiled SQL, and pacing context from Rails.
+
+For a question like “Can you give me performance this week vs last week for Deepgram?”:
+
+1. Call `search_dataset_contexts` with a query such as `Deepgram performance`.
+2. Select the best matching dataset context row.
+3. Call `get_dataset_context` for that dataset, optionally with `includeSql` and `sqlModels`.
+4. Read the markdown guidance to choose the preferred table/model, date field, metrics, and caveats.
+5. Use warehouse, dry-run, and query execution tools as needed to inspect schema, validate SQL, and retrieve results.
 
 `suggest_dataset_context` drafts context without saving it. `update_dataset_context` persists changes in Rails and should only be called after explicit user approval.
+
+Use `update_dataset_context` for visibility changes instead of adding separate hide/feature tools. For assistant-authored updates, send `lastEditedBy: "assistant"` in `datasetContext`.
+
+`datasetContext` may include:
+
+- `visibility`: `hidden`, `normal`, or `featured`
+- `priority`
+- `summary`
+- `contextMarkdown`
+- `tags`
+- `primaryTables`: array of `{ name, reason }` routing hints
+- `recommendedQuestions`
+- `caveats`
+- `lastEditedBy`: `assistant`, `user`, or `system`
 
 ## Response and error handling
 

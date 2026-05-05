@@ -230,6 +230,7 @@ export function toToolError(error) {
   const status = error?.status;
   const code = error?.code || "unknown_error";
   const message = error?.message || "Unknown request error";
+  const errors = Array.isArray(error?.errors) ? error.errors : [];
 
   const statusHint =
     status === 401
@@ -237,7 +238,9 @@ export function toToolError(error) {
         ? "invalid_token"
         : "invalid_or_missing_key"
       : status === 403
-        ? "scope_or_account_mismatch"
+        ? code === "missing_scope"
+          ? "missing_scope"
+          : "scope_or_account_mismatch"
         : status === 404
           ? "resource_not_found"
           : status === 422
@@ -257,6 +260,7 @@ export function toToolError(error) {
               status_hint: statusHint,
               code,
               message,
+              errors,
               raw_body: error?.raw_body || null,
             },
           },

@@ -40,6 +40,14 @@ const datasetContextPayload = z.object({
   summary: z.string().optional(),
   contextMarkdown: z.string().optional(),
   tags: z.array(z.string()).optional(),
+  primaryTables: z
+    .array(
+      z.object({
+        name: z.string().min(1),
+        reason: z.string().min(1),
+      }),
+    )
+    .optional(),
   recommendedQuestions: z.array(z.string()).optional(),
   caveats: z.string().optional(),
   lastEditedBy: z.enum(["assistant", "user", "system"]).optional(),
@@ -192,7 +200,11 @@ export function createServer(config) {
       title: "Get Dataset Context",
       description:
         "Fetch full markdown context after choosing a likely dataset. Scope: read:datasets read:dataset_contexts.",
-      inputSchema: z.object({ datasetId: z.union([z.string(), z.number()]) }),
+      inputSchema: z.object({
+        datasetId: z.union([z.string(), z.number()]),
+        includeSql: z.boolean().optional(),
+        sqlModels: z.string().optional(),
+      }),
       annotations: {
         readOnlyHint: true,
         destructiveHint: false,
@@ -205,7 +217,7 @@ export function createServer(config) {
       return request(
         "GET",
         `/accounts/${accountId}/datasets/${String(args.datasetId)}/context`,
-        {},
+        { include_sql: args.includeSql, sql_models: args.sqlModels },
         undefined,
         accountId,
       );
