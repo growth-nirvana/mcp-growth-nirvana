@@ -135,6 +135,24 @@ Async run tools:
 - `create_dataset_bundle_export(account_id, dataset_id, idempotency_key?)`
 - `get_dataset_bundle_export(account_id, dataset_id, bundle_export_id)`
 
+Report spec tools:
+
+- `list_report_templates(account_id, page?, per_page?)`
+- `get_report_template(account_id, report_template_id)`
+- `create_report_template(account_id, queries?, sections?, defaultDateWindow?, brandKit?, schedule?)` requires explicit user approval before use
+- `update_report_template(account_id, report_template_id, queries?, sections?, defaultDateWindow?, brandKit?, schedule?)` requires explicit user approval before use
+- `list_report_specs(account_id, dataset_id?, resolved?, page?, per_page?)`
+- `get_report_spec(account_id, report_spec_id, resolved?)`
+- `create_report_spec(account_id, dataset_id, templateId?, queries?, sections?, defaultDateWindow?, brandKit?, schedule?)` requires explicit user approval before use
+- `update_report_spec(account_id, report_spec_id, dataset_id?, templateId?, queries?, sections?, defaultDateWindow?, brandKit?, schedule?)` requires explicit user approval before use
+- `run_report_spec(account_id, report_spec_id, idempotency_key?)` requires explicit user approval before use
+- `get_report_run(account_id, report_run_id)`
+- `cancel_report_run(account_id, report_run_id)`
+- `list_published_reports(account_id, report_spec_id?, dataset_id?, page?, per_page?)`
+- `get_published_report(account_id, published_report_id)`
+- `get_brand_kit(account_id)`
+- `update_brand_kit(account_id, brandKit)` requires explicit user approval before use
+
 ## Scopes
 
 Scopes expected by the tools:
@@ -143,10 +161,20 @@ Scopes expected by the tools:
 - `read:datasets`
 - `read:dataset_contexts`
 - `read:warehouse_tables`
+- `read:warehouse_fields`
 - `read:connectors`
 - `read:transformation_models`
 - `read:client_dataset_config`
 - `read:data_transformations`
+- `read:report_templates`
+- `write:report_templates`
+- `read:report_specs`
+- `write:report_specs`
+- `run:reports`
+- `read:report_runs`
+- `read:published_reports`
+- `read:brand_kits`
+- `write:brand_kits`
 - `run:query_executions`
 - `run:dry_runs`
 - `run:packages`
@@ -194,6 +222,26 @@ Use `update_dataset_context` for visibility changes instead of adding separate h
 - `recommendedQuestions`
 - `caveats`
 - `lastEditedBy`: `assistant`, `user`, or `system`
+
+## Report spec workflow
+
+Report spec tools let an agent manage reusable account-level templates, dataset-specific report specs, durable report runs, published report metadata, and brand-kit defaults.
+
+Recommended report-authoring flow:
+
+1. Discover the dataset with `search_dataset_contexts`, `get_dataset_context`, and warehouse table/field tools.
+2. Read existing report templates with `list_report_templates` and fetch brand defaults with `get_brand_kit`.
+3. If brand tokens are missing, inspect public client materials, propose safe palette/logo/font hints, and ask for user approval before `update_brand_kit`.
+4. Draft report queries and sections from verified dataset context and schema.
+5. Ask for explicit user approval before creating or updating report templates, specs, schedules, brand kits, or runs.
+6. Save approved templates/specs with `create_report_template`, `update_report_template`, `create_report_spec`, or `update_report_spec`.
+7. Fetch the resolved report spec with `get_report_spec` before execution or explanation.
+8. Start a durable run with `run_report_spec`, then poll `get_report_run` until `succeeded`, `failed`, or `cancelled`.
+9. Use `list_published_reports` or `get_published_report` when a run produces output metadata.
+
+Report template and spec payloads use structured JSON fields: `queries`, `sections`, `defaultDateWindow`, `brandKit`, and `schedule`. Brand kits are non-executable hints only; do not send React, JavaScript, HTML, arbitrary CSS, or component source.
+
+OAuth users with tokens minted before the report scopes were requested must reauthorize. Older tokens can keep using their existing scopes, but report tools will fail with `missing_scope` until consent includes the new report scopes.
 
 ## Response and error handling
 

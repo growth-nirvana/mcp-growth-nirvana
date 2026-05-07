@@ -45,6 +45,21 @@ test("registers new account/model/config tools", () => {
   assert.ok(tools.includes("install_all_paid_pro"));
   assert.ok(tools.includes("create_dataset_bundle_export"));
   assert.ok(tools.includes("get_dataset_bundle_export"));
+  assert.ok(tools.includes("list_report_templates"));
+  assert.ok(tools.includes("get_report_template"));
+  assert.ok(tools.includes("create_report_template"));
+  assert.ok(tools.includes("update_report_template"));
+  assert.ok(tools.includes("list_report_specs"));
+  assert.ok(tools.includes("get_report_spec"));
+  assert.ok(tools.includes("create_report_spec"));
+  assert.ok(tools.includes("update_report_spec"));
+  assert.ok(tools.includes("run_report_spec"));
+  assert.ok(tools.includes("get_report_run"));
+  assert.ok(tools.includes("cancel_report_run"));
+  assert.ok(tools.includes("list_published_reports"));
+  assert.ok(tools.includes("get_published_report"));
+  assert.ok(tools.includes("get_brand_kit"));
+  assert.ok(tools.includes("update_brand_kit"));
 });
 
 test("search_datasets maps endpoint with dataset search params", async () => {
@@ -551,4 +566,171 @@ test("oauth dataset context tools use account self", async () => {
 
   assert.match(urls[0], /\/accounts\/self\/datasets\/123\/context$/);
   assert.match(urls[1], /\/accounts\/self\/datasets\/123\/context$/);
+});
+
+test("report template tools map list/get/create/update endpoints", async () => {
+  const server = buildServer();
+  const listTool = server._registeredTools.list_report_templates;
+  const getTool = server._registeredTools.get_report_template;
+  const createTool = server._registeredTools.create_report_template;
+  const updateTool = server._registeredTools.update_report_template;
+  const requests = [];
+
+  globalThis.fetch = async (url, options = {}) => {
+    requests.push({
+      url,
+      method: options.method || "GET",
+      body: options.body ? JSON.parse(options.body) : null,
+    });
+    return jsonResponse(200, { data: { id: 12 }, errors: [] });
+  };
+
+  await listTool.handler({ account_id: "42", page: 1, per_page: 20 });
+  await getTool.handler({ account_id: "42", report_template_id: "12" });
+  await createTool.handler({
+    account_id: "42",
+    queries: [{ name: "spend", sql: "select 1" }],
+    sections: [{ title: "Summary" }],
+    defaultDateWindow: { preset: "last_7_days" },
+    brandKit: { colors: { primary: "#111111" } },
+    schedule: { cadence: "weekly" },
+  });
+  await updateTool.handler({
+    account_id: "42",
+    report_template_id: "12",
+    sections: [{ title: "Updated summary" }],
+  });
+
+  assert.match(requests[0].url, /\/accounts\/42\/report_templates\?page=1&per_page=20$/);
+  assert.equal(requests[0].method, "GET");
+  assert.match(requests[1].url, /\/accounts\/42\/report_templates\/12$/);
+  assert.equal(requests[1].method, "GET");
+  assert.match(requests[2].url, /\/accounts\/42\/report_templates$/);
+  assert.equal(requests[2].method, "POST");
+  assert.equal(requests[2].body.reportTemplate.queries[0].name, "spend");
+  assert.equal(requests[2].body.reportTemplate.defaultDateWindow.preset, "last_7_days");
+  assert.match(requests[3].url, /\/accounts\/42\/report_templates\/12$/);
+  assert.equal(requests[3].method, "PATCH");
+  assert.equal(requests[3].body.reportTemplate.sections[0].title, "Updated summary");
+});
+
+test("report spec tools map list/get/create/update endpoints", async () => {
+  const server = buildServer();
+  const listTool = server._registeredTools.list_report_specs;
+  const getTool = server._registeredTools.get_report_spec;
+  const createTool = server._registeredTools.create_report_spec;
+  const updateTool = server._registeredTools.update_report_spec;
+  const requests = [];
+
+  globalThis.fetch = async (url, options = {}) => {
+    requests.push({
+      url,
+      method: options.method || "GET",
+      body: options.body ? JSON.parse(options.body) : null,
+    });
+    return jsonResponse(200, { data: { id: 34 }, errors: [] });
+  };
+
+  await listTool.handler({ account_id: "42", dataset_id: "9", resolved: false, page: 2, per_page: 10 });
+  await getTool.handler({ account_id: "42", report_spec_id: "34", resolved: true });
+  await createTool.handler({
+    account_id: "42",
+    dataset_id: "9",
+    templateId: "12",
+    queries: [{ name: "spend", sql: "select 1" }],
+    sections: [{ title: "Summary" }],
+  });
+  await updateTool.handler({
+    account_id: "42",
+    report_spec_id: "34",
+    defaultDateWindow: { preset: "month_to_date" },
+  });
+
+  assert.match(
+    requests[0].url,
+    /\/accounts\/42\/report_specs\?dataset_id=9&resolved=false&page=2&per_page=10$/,
+  );
+  assert.equal(requests[0].method, "GET");
+  assert.match(requests[1].url, /\/accounts\/42\/report_specs\/34\?resolved=true$/);
+  assert.equal(requests[1].method, "GET");
+  assert.match(requests[2].url, /\/accounts\/42\/report_specs$/);
+  assert.equal(requests[2].method, "POST");
+  assert.equal(requests[2].body.reportSpec.datasetId, "9");
+  assert.equal(requests[2].body.reportSpec.templateId, "12");
+  assert.match(requests[3].url, /\/accounts\/42\/report_specs\/34$/);
+  assert.equal(requests[3].method, "PATCH");
+  assert.equal(requests[3].body.reportSpec.defaultDateWindow.preset, "month_to_date");
+});
+
+test("report run, published report, and brand kit tools map endpoints", async () => {
+  const server = buildServer();
+  const runTool = server._registeredTools.run_report_spec;
+  const getRunTool = server._registeredTools.get_report_run;
+  const cancelRunTool = server._registeredTools.cancel_report_run;
+  const listPublishedTool = server._registeredTools.list_published_reports;
+  const getPublishedTool = server._registeredTools.get_published_report;
+  const getBrandTool = server._registeredTools.get_brand_kit;
+  const updateBrandTool = server._registeredTools.update_brand_kit;
+  const requests = [];
+
+  globalThis.fetch = async (url, options = {}) => {
+    requests.push({
+      url,
+      method: options.method || "GET",
+      body: options.body ? JSON.parse(options.body) : null,
+    });
+    return jsonResponse(200, { data: { id: 56 }, errors: [] });
+  };
+
+  await runTool.handler({ account_id: "42", report_spec_id: "34", idempotency_key: "idem-1" });
+  await getRunTool.handler({ account_id: "42", report_run_id: "56" });
+  await cancelRunTool.handler({ account_id: "42", report_run_id: "56" });
+  await listPublishedTool.handler({ account_id: "42", dataset_id: "9", page: 1, per_page: 5 });
+  await listPublishedTool.handler({ account_id: "42", report_spec_id: "34" });
+  await getPublishedTool.handler({ account_id: "42", published_report_id: "78" });
+  await getBrandTool.handler({ account_id: "42" });
+  await updateBrandTool.handler({
+    account_id: "42",
+    brandKit: { colors: { primary: "#111111" }, fonts: { heading: "Inter" } },
+  });
+
+  assert.match(requests[0].url, /\/accounts\/42\/report_specs\/34\/runs$/);
+  assert.equal(requests[0].method, "POST");
+  assert.equal(requests[0].body.reportRun.idempotencyKey, "idem-1");
+  assert.match(requests[1].url, /\/accounts\/42\/report_runs\/56$/);
+  assert.equal(requests[1].method, "GET");
+  assert.match(requests[2].url, /\/accounts\/42\/report_runs\/56\/cancel$/);
+  assert.equal(requests[2].method, "PATCH");
+  assert.match(requests[3].url, /\/accounts\/42\/published_reports\?dataset_id=9&page=1&per_page=5$/);
+  assert.match(requests[4].url, /\/accounts\/42\/report_specs\/34\/published_reports$/);
+  assert.match(requests[5].url, /\/accounts\/42\/published_reports\/78$/);
+  assert.match(requests[6].url, /\/accounts\/42\/brand_kit$/);
+  assert.equal(requests[6].method, "GET");
+  assert.match(requests[7].url, /\/accounts\/42\/brand_kit$/);
+  assert.equal(requests[7].method, "PUT");
+  assert.equal(requests[7].body.brandKit.fonts.heading, "Inter");
+});
+
+test("oauth report tools force account self", async () => {
+  const server = createServer({
+    baseUrl: "https://example.com/api/v1/mcp",
+    authMode: "oauth",
+    oauthBearerToken: "oauth-token",
+    timeoutMs: 1000,
+    maxRetries: 0,
+  });
+  const listTool = server._registeredTools.list_report_specs;
+  const updateBrandTool = server._registeredTools.update_brand_kit;
+  const urls = [];
+
+  globalThis.fetch = async (url) => {
+    urls.push(url);
+    return jsonResponse(200, { data: { id: 34 }, errors: [] });
+  };
+
+  await listTool.handler({ account_id: "42", dataset_id: "9" });
+  await updateBrandTool.handler({ account_id: "42", brandKit: { colors: { primary: "#111111" } } });
+
+  assert.match(urls[0], /\/accounts\/self\/report_specs\?dataset_id=9$/);
+  assert.match(urls[1], /\/accounts\/self\/brand_kit$/);
 });

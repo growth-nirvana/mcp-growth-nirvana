@@ -5,7 +5,7 @@ import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import { z } from "zod";
 import { getConfig } from "./config.js";
-import { railsGet, railsPatch, railsPost, toToolError } from "./http.js";
+import { railsGet, railsPatch, railsPost, railsPut, toToolError } from "./http.js";
 
 const accountField = z.union([z.literal("self"), z.string().min(1), z.number()]);
 const accountOptional = z.object({ account_id: accountField.optional() });
@@ -18,6 +18,36 @@ const pagingFields = {
 const contextPagingFields = {
   page: z.number().int().positive().optional(),
   perPage: z.number().int().positive().optional(),
+};
+const idField = z.union([z.string(), z.number()]);
+const jsonObject = z.record(z.string(), z.any());
+const reportTemplatePayload = {
+  queries: z.array(jsonObject).optional(),
+  sections: z.array(jsonObject).optional(),
+  defaultDateWindow: jsonObject.optional(),
+  brandKit: jsonObject.optional(),
+  schedule: jsonObject.optional(),
+};
+const reportSpecPayload = {
+  dataset_id: idField.optional(),
+  templateId: idField.optional(),
+  queries: z.array(jsonObject).optional(),
+  sections: z.array(jsonObject).optional(),
+  defaultDateWindow: jsonObject.optional(),
+  brandKit: jsonObject.optional(),
+  schedule: jsonObject.optional(),
+};
+const reportReadAnnotations = {
+  readOnlyHint: true,
+  destructiveHint: false,
+  idempotentHint: true,
+  openWorldHint: true,
+};
+const reportWriteAnnotations = {
+  readOnlyHint: false,
+  destructiveHint: false,
+  idempotentHint: false,
+  openWorldHint: true,
 };
 
 const datasetInclude = z
@@ -71,6 +101,32 @@ function normalizeAccountId(value, config) {
   return String(value);
 }
 
+function reportTemplateBody(args) {
+  return {
+    reportTemplate: {
+      queries: args.queries,
+      sections: args.sections,
+      defaultDateWindow: args.defaultDateWindow,
+      brandKit: args.brandKit,
+      schedule: args.schedule,
+    },
+  };
+}
+
+function reportSpecBody(args) {
+  return {
+    reportSpec: {
+      datasetId: args.dataset_id,
+      templateId: args.templateId,
+      queries: args.queries,
+      sections: args.sections,
+      defaultDateWindow: args.defaultDateWindow,
+      brandKit: args.brandKit,
+      schedule: args.schedule,
+    },
+  };
+}
+
 async function doRequest(method, path, params, body, accountId) {
   const common = {
     baseUrl: this.baseUrl,
@@ -86,6 +142,7 @@ async function doRequest(method, path, params, body, accountId) {
   };
   if (method === "GET") return railsGet(common);
   if (method === "POST") return railsPost(common);
+  if (method === "PUT") return railsPut(common);
   return railsPatch(common);
 }
 
@@ -1174,6 +1231,360 @@ export function createServer(config) {
         undefined,
         accountId,
       );
+    },
+  );
+
+  registerTool(
+    server,
+    config,
+    "list_report_templates",
+    {
+      title: "List Report Templates",
+      description: "GET /accounts/:account_id/report_templates. Scope: read:report_templates.",
+      inputSchema: accountOptional.extend({
+        page: z.number().int().positive().optional(),
+        per_page: z.number().int().positive().optional(),
+      }),
+      annotations: reportReadAnnotations,
+    },
+    async (args, request) => {
+      const accountId = normalizeAccountId(args.account_id, config);
+      return request(
+        "GET",
+        `/accounts/${accountId}/report_templates`,
+        { page: args.page, per_page: args.per_page },
+        undefined,
+        accountId,
+      );
+    },
+  );
+
+  registerTool(
+    server,
+    config,
+    "get_report_template",
+    {
+      title: "Get Report Template",
+      description: "GET /accounts/:account_id/report_templates/:id. Scope: read:report_templates.",
+      inputSchema: accountOptional.extend({ report_template_id: idField }),
+      annotations: reportReadAnnotations,
+    },
+    async (args, request) => {
+      const accountId = normalizeAccountId(args.account_id, config);
+      return request(
+        "GET",
+        `/accounts/${accountId}/report_templates/${String(args.report_template_id)}`,
+        {},
+        undefined,
+        accountId,
+      );
+    },
+  );
+
+  registerTool(
+    server,
+    config,
+    "create_report_template",
+    {
+      title: "Create Report Template",
+      description:
+        "POST /accounts/:account_id/report_templates. Scope: write:report_templates. Requires explicit user approval.",
+      inputSchema: accountOptional.extend(reportTemplatePayload),
+      annotations: reportWriteAnnotations,
+    },
+    async (args, request) => {
+      const accountId = normalizeAccountId(args.account_id, config);
+      return request("POST", `/accounts/${accountId}/report_templates`, {}, reportTemplateBody(args), accountId);
+    },
+  );
+
+  registerTool(
+    server,
+    config,
+    "update_report_template",
+    {
+      title: "Update Report Template",
+      description:
+        "PATCH /accounts/:account_id/report_templates/:id. Scope: write:report_templates. Requires explicit user approval.",
+      inputSchema: accountOptional.extend({
+        report_template_id: idField,
+        ...reportTemplatePayload,
+      }),
+      annotations: reportWriteAnnotations,
+    },
+    async (args, request) => {
+      const accountId = normalizeAccountId(args.account_id, config);
+      return request(
+        "PATCH",
+        `/accounts/${accountId}/report_templates/${String(args.report_template_id)}`,
+        {},
+        reportTemplateBody(args),
+        accountId,
+      );
+    },
+  );
+
+  registerTool(
+    server,
+    config,
+    "list_report_specs",
+    {
+      title: "List Report Specs",
+      description: "GET /accounts/:account_id/report_specs. Scope: read:report_specs.",
+      inputSchema: accountOptional.extend({
+        dataset_id: idField.optional(),
+        resolved: z.boolean().optional(),
+        page: z.number().int().positive().optional(),
+        per_page: z.number().int().positive().optional(),
+      }),
+      annotations: reportReadAnnotations,
+    },
+    async (args, request) => {
+      const accountId = normalizeAccountId(args.account_id, config);
+      return request(
+        "GET",
+        `/accounts/${accountId}/report_specs`,
+        {
+          dataset_id: args.dataset_id,
+          resolved: args.resolved,
+          page: args.page,
+          per_page: args.per_page,
+        },
+        undefined,
+        accountId,
+      );
+    },
+  );
+
+  registerTool(
+    server,
+    config,
+    "get_report_spec",
+    {
+      title: "Get Report Spec",
+      description:
+        "GET /accounts/:account_id/report_specs/:id. Scope: read:report_specs. Returns resolved spec by default.",
+      inputSchema: accountOptional.extend({
+        report_spec_id: idField,
+        resolved: z.boolean().optional(),
+      }),
+      annotations: reportReadAnnotations,
+    },
+    async (args, request) => {
+      const accountId = normalizeAccountId(args.account_id, config);
+      return request(
+        "GET",
+        `/accounts/${accountId}/report_specs/${String(args.report_spec_id)}`,
+        { resolved: args.resolved },
+        undefined,
+        accountId,
+      );
+    },
+  );
+
+  registerTool(
+    server,
+    config,
+    "create_report_spec",
+    {
+      title: "Create Report Spec",
+      description:
+        "POST /accounts/:account_id/report_specs. Scope: write:report_specs. Requires explicit user approval.",
+      inputSchema: accountOptional.extend({
+        dataset_id: idField,
+        templateId: idField.optional(),
+        queries: z.array(jsonObject).optional(),
+        sections: z.array(jsonObject).optional(),
+        defaultDateWindow: jsonObject.optional(),
+        brandKit: jsonObject.optional(),
+        schedule: jsonObject.optional(),
+      }),
+      annotations: reportWriteAnnotations,
+    },
+    async (args, request) => {
+      const accountId = normalizeAccountId(args.account_id, config);
+      return request("POST", `/accounts/${accountId}/report_specs`, {}, reportSpecBody(args), accountId);
+    },
+  );
+
+  registerTool(
+    server,
+    config,
+    "update_report_spec",
+    {
+      title: "Update Report Spec",
+      description:
+        "PATCH /accounts/:account_id/report_specs/:id. Scope: write:report_specs. Requires explicit user approval.",
+      inputSchema: accountOptional.extend({
+        report_spec_id: idField,
+        ...reportSpecPayload,
+      }),
+      annotations: reportWriteAnnotations,
+    },
+    async (args, request) => {
+      const accountId = normalizeAccountId(args.account_id, config);
+      return request(
+        "PATCH",
+        `/accounts/${accountId}/report_specs/${String(args.report_spec_id)}`,
+        {},
+        reportSpecBody(args),
+        accountId,
+      );
+    },
+  );
+
+  registerTool(
+    server,
+    config,
+    "run_report_spec",
+    {
+      title: "Run Report Spec",
+      description:
+        "POST /accounts/:account_id/report_specs/:report_spec_id/runs. Scope: run:reports. Requires explicit user approval.",
+      inputSchema: accountOptional.extend({
+        report_spec_id: idField,
+        idempotency_key: z.string().optional(),
+      }),
+      annotations: reportWriteAnnotations,
+    },
+    async (args, request) => {
+      const accountId = normalizeAccountId(args.account_id, config);
+      return request(
+        "POST",
+        `/accounts/${accountId}/report_specs/${String(args.report_spec_id)}/runs`,
+        {},
+        { reportRun: { idempotencyKey: args.idempotency_key } },
+        accountId,
+      );
+    },
+  );
+
+  registerTool(
+    server,
+    config,
+    "get_report_run",
+    {
+      title: "Get Report Run",
+      description: "GET /accounts/:account_id/report_runs/:id. Scope: read:report_runs.",
+      inputSchema: accountOptional.extend({ report_run_id: idField }),
+      annotations: reportReadAnnotations,
+    },
+    async (args, request) => {
+      const accountId = normalizeAccountId(args.account_id, config);
+      return request("GET", `/accounts/${accountId}/report_runs/${String(args.report_run_id)}`, {}, undefined, accountId);
+    },
+  );
+
+  registerTool(
+    server,
+    config,
+    "cancel_report_run",
+    {
+      title: "Cancel Report Run",
+      description: "PATCH /accounts/:account_id/report_runs/:id/cancel. Scope: run:reports.",
+      inputSchema: accountOptional.extend({ report_run_id: idField }),
+      annotations: reportWriteAnnotations,
+    },
+    async (args, request) => {
+      const accountId = normalizeAccountId(args.account_id, config);
+      return request(
+        "PATCH",
+        `/accounts/${accountId}/report_runs/${String(args.report_run_id)}/cancel`,
+        {},
+        {},
+        accountId,
+      );
+    },
+  );
+
+  registerTool(
+    server,
+    config,
+    "list_published_reports",
+    {
+      title: "List Published Reports",
+      description:
+        "GET /accounts/:account_id/published_reports or /accounts/:account_id/report_specs/:report_spec_id/published_reports. Scope: read:published_reports.",
+      inputSchema: accountOptional.extend({
+        report_spec_id: idField.optional(),
+        dataset_id: idField.optional(),
+        page: z.number().int().positive().optional(),
+        per_page: z.number().int().positive().optional(),
+      }),
+      annotations: reportReadAnnotations,
+    },
+    async (args, request) => {
+      const accountId = normalizeAccountId(args.account_id, config);
+      const path =
+        args.report_spec_id === undefined
+          ? `/accounts/${accountId}/published_reports`
+          : `/accounts/${accountId}/report_specs/${String(args.report_spec_id)}/published_reports`;
+      return request(
+        "GET",
+        path,
+        {
+          dataset_id: args.dataset_id,
+          page: args.page,
+          per_page: args.per_page,
+        },
+        undefined,
+        accountId,
+      );
+    },
+  );
+
+  registerTool(
+    server,
+    config,
+    "get_published_report",
+    {
+      title: "Get Published Report",
+      description: "GET /accounts/:account_id/published_reports/:id. Scope: read:published_reports.",
+      inputSchema: accountOptional.extend({ published_report_id: idField }),
+      annotations: reportReadAnnotations,
+    },
+    async (args, request) => {
+      const accountId = normalizeAccountId(args.account_id, config);
+      return request(
+        "GET",
+        `/accounts/${accountId}/published_reports/${String(args.published_report_id)}`,
+        {},
+        undefined,
+        accountId,
+      );
+    },
+  );
+
+  registerTool(
+    server,
+    config,
+    "get_brand_kit",
+    {
+      title: "Get Brand Kit",
+      description: "GET /accounts/:account_id/brand_kit. Scope: read:brand_kits.",
+      inputSchema: accountOptional,
+      annotations: reportReadAnnotations,
+    },
+    async (args, request) => {
+      const accountId = normalizeAccountId(args.account_id, config);
+      return request("GET", `/accounts/${accountId}/brand_kit`, {}, undefined, accountId);
+    },
+  );
+
+  registerTool(
+    server,
+    config,
+    "update_brand_kit",
+    {
+      title: "Update Brand Kit",
+      description:
+        "PUT /accounts/:account_id/brand_kit. Scope: write:brand_kits. Send only safe brand tokens, not executable code.",
+      inputSchema: accountOptional.extend({ brandKit: jsonObject }),
+      annotations: reportWriteAnnotations,
+    },
+    async (args, request) => {
+      const accountId = normalizeAccountId(args.account_id, config);
+      return request("PUT", `/accounts/${accountId}/brand_kit`, {}, { brandKit: args.brandKit }, accountId);
     },
   );
 

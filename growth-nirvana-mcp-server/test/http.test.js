@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { railsGet, railsPatch, railsPost, toToolError } from "../src/http.js";
+import { railsGet, railsPatch, railsPost, railsPut, toToolError } from "../src/http.js";
 
 function jsonResponse(status, payload) {
   return {
@@ -284,4 +284,32 @@ test("railsPatch sends patch requests", async () => {
 
   assert.equal(methodSeen, "PATCH");
   assert.equal(body.data.state, "cancelled");
+});
+
+test("railsPut sends json body with headers", async () => {
+  let methodSeen = "";
+  let contentTypeSeen = "";
+  let requestBody = null;
+  globalThis.fetch = async (_url, options) => {
+    methodSeen = options.method;
+    contentTypeSeen = options.headers["Content-Type"];
+    requestBody = JSON.parse(options.body);
+    return jsonResponse(200, { data: { colors: { primary: "#111111" } }, errors: [] });
+  };
+
+  const body = await railsPut({
+    baseUrl: "https://example.com/api/v1/mcp",
+    apiKey: "secret",
+    path: "/accounts/self/brand_kit",
+    params: {},
+    body: { brandKit: { colors: { primary: "#111111" } } },
+    accountId: "self",
+    timeoutMs: 1000,
+    maxRetries: 0,
+  });
+
+  assert.equal(methodSeen, "PUT");
+  assert.equal(contentTypeSeen, "application/json");
+  assert.equal(requestBody.brandKit.colors.primary, "#111111");
+  assert.equal(body.data.colors.primary, "#111111");
 });

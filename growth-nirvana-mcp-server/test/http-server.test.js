@@ -70,6 +70,10 @@ test("protected resource metadata is served from both well-known paths", async (
     assert.deepEqual(body.authorization_servers, ["https://app.growthnirvana.com"]);
     assert.ok(body.scopes_supported.includes("read:datasets"));
     assert.ok(body.scopes_supported.includes("run:query_executions"));
+    assert.ok(body.scopes_supported.includes("read:report_specs"));
+    assert.ok(body.scopes_supported.includes("write:report_templates"));
+    assert.ok(body.scopes_supported.includes("run:reports"));
+    assert.ok(body.scopes_supported.includes("write:brand_kits"));
   }
 });
 

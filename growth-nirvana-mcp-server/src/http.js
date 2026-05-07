@@ -139,6 +139,35 @@ export async function railsPatch({
   });
 }
 
+export async function railsPut({
+  baseUrl,
+  authMode,
+  apiKey,
+  oauthBearerToken,
+  path,
+  params,
+  body,
+  accountId,
+  timeoutMs,
+  maxRetries,
+  backoffBaseMs = 200,
+}) {
+  return railsRequest({
+    method: "PUT",
+    baseUrl,
+    authMode,
+    apiKey,
+    oauthBearerToken,
+    path,
+    params,
+    body,
+    accountId,
+    timeoutMs,
+    maxRetries,
+    backoffBaseMs,
+  });
+}
+
 export async function railsRequest({
   method,
   baseUrl,
