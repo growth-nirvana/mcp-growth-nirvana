@@ -22,6 +22,8 @@ const contextPagingFields = {
 const idField = z.union([z.string(), z.number()]);
 const jsonObject = z.record(z.string(), z.any());
 const reportTemplatePayload = {
+  name: z.string().min(1),
+  description: z.string().optional(),
   queries: z.array(jsonObject).optional(),
   sections: z.array(jsonObject).optional(),
   defaultDateWindow: jsonObject.optional(),
@@ -31,11 +33,9 @@ const reportTemplatePayload = {
 const reportSpecPayload = {
   dataset_id: idField.optional(),
   templateId: idField.optional(),
-  queries: z.array(jsonObject).optional(),
-  sections: z.array(jsonObject).optional(),
-  defaultDateWindow: jsonObject.optional(),
-  brandKit: jsonObject.optional(),
-  schedule: jsonObject.optional(),
+  name: z.string().min(1).optional(),
+  overrides: jsonObject.optional(),
+  lastEditedBy: z.enum(["assistant", "user", "agent", "system"]).optional(),
 };
 const reportReadAnnotations = {
   readOnlyHint: true,
@@ -104,6 +104,8 @@ function normalizeAccountId(value, config) {
 function reportTemplateBody(args) {
   return {
     reportTemplate: {
+      name: args.name,
+      description: args.description,
       queries: args.queries,
       sections: args.sections,
       defaultDateWindow: args.defaultDateWindow,
@@ -116,13 +118,11 @@ function reportTemplateBody(args) {
 function reportSpecBody(args) {
   return {
     reportSpec: {
-      datasetId: args.dataset_id,
+      dataset_id: args.dataset_id,
       templateId: args.templateId,
-      queries: args.queries,
-      sections: args.sections,
-      defaultDateWindow: args.defaultDateWindow,
-      brandKit: args.brandKit,
-      schedule: args.schedule,
+      name: args.name,
+      overrides: args.overrides,
+      lastEditedBy: args.lastEditedBy,
     },
   };
 }
@@ -1390,15 +1390,7 @@ export function createServer(config) {
       title: "Create Report Spec",
       description:
         "POST /accounts/:account_id/report_specs. Scope: write:report_specs. Requires explicit user approval.",
-      inputSchema: accountOptional.extend({
-        dataset_id: idField,
-        templateId: idField.optional(),
-        queries: z.array(jsonObject).optional(),
-        sections: z.array(jsonObject).optional(),
-        defaultDateWindow: jsonObject.optional(),
-        brandKit: jsonObject.optional(),
-        schedule: jsonObject.optional(),
-      }),
+      inputSchema: accountOptional.extend(reportSpecPayload),
       annotations: reportWriteAnnotations,
     },
     async (args, request) => {

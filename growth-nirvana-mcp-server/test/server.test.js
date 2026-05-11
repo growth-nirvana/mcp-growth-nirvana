@@ -589,6 +589,8 @@ test("report template tools map list/get/create/update endpoints", async () => {
   await getTool.handler({ account_id: "42", report_template_id: "12" });
   await createTool.handler({
     account_id: "42",
+    name: "Weekly template",
+    description: "Weekly performance summary",
     queries: [{ name: "spend", sql: "select 1" }],
     sections: [{ title: "Summary" }],
     defaultDateWindow: { preset: "last_7_days" },
@@ -607,6 +609,8 @@ test("report template tools map list/get/create/update endpoints", async () => {
   assert.equal(requests[1].method, "GET");
   assert.match(requests[2].url, /\/accounts\/42\/report_templates$/);
   assert.equal(requests[2].method, "POST");
+  assert.equal(requests[2].body.reportTemplate.name, "Weekly template");
+  assert.equal(requests[2].body.reportTemplate.description, "Weekly performance summary");
   assert.equal(requests[2].body.reportTemplate.queries[0].name, "spend");
   assert.equal(requests[2].body.reportTemplate.defaultDateWindow.preset, "last_7_days");
   assert.match(requests[3].url, /\/accounts\/42\/report_templates\/12$/);
@@ -637,13 +641,17 @@ test("report spec tools map list/get/create/update endpoints", async () => {
     account_id: "42",
     dataset_id: "9",
     templateId: "12",
-    queries: [{ name: "spend", sql: "select 1" }],
-    sections: [{ title: "Summary" }],
+    name: "May performance report",
+    overrides: {
+      sections: [{ title: "Summary" }],
+    },
+    lastEditedBy: "assistant",
   });
   await updateTool.handler({
     account_id: "42",
     report_spec_id: "34",
-    defaultDateWindow: { preset: "month_to_date" },
+    overrides: { defaultDateWindow: { preset: "month_to_date" } },
+    lastEditedBy: "agent",
   });
 
   assert.match(
@@ -655,11 +663,15 @@ test("report spec tools map list/get/create/update endpoints", async () => {
   assert.equal(requests[1].method, "GET");
   assert.match(requests[2].url, /\/accounts\/42\/report_specs$/);
   assert.equal(requests[2].method, "POST");
-  assert.equal(requests[2].body.reportSpec.datasetId, "9");
+  assert.equal(requests[2].body.reportSpec.dataset_id, "9");
   assert.equal(requests[2].body.reportSpec.templateId, "12");
+  assert.equal(requests[2].body.reportSpec.name, "May performance report");
+  assert.equal(requests[2].body.reportSpec.overrides.sections[0].title, "Summary");
+  assert.equal(requests[2].body.reportSpec.lastEditedBy, "assistant");
   assert.match(requests[3].url, /\/accounts\/42\/report_specs\/34$/);
   assert.equal(requests[3].method, "PATCH");
-  assert.equal(requests[3].body.reportSpec.defaultDateWindow.preset, "month_to_date");
+  assert.equal(requests[3].body.reportSpec.overrides.defaultDateWindow.preset, "month_to_date");
+  assert.equal(requests[3].body.reportSpec.lastEditedBy, "agent");
 });
 
 test("report run, published report, and brand kit tools map endpoints", async () => {
