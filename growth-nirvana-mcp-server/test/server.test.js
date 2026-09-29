@@ -37,6 +37,9 @@ test("registers new account/model/config tools", () => {
   assert.ok(tools.includes("search_transformation_models"));
   assert.ok(tools.includes("list_connectors"));
   assert.ok(tools.includes("get_connector"));
+  assert.ok(tools.includes("platform_request"));
+  assert.ok(tools.includes("get_platform_request"));
+  assert.ok(tools.includes("run_platform_request"));
   assert.ok(tools.includes("list_dataset_warehouse_fields"));
   assert.ok(tools.includes("get_dataset_warehouse_field"));
   assert.ok(tools.includes("get_dataset_client_config"));
@@ -315,6 +318,106 @@ test("create_query_execution maps POST body and endpoint", async () => {
       run_with_liquid: false,
     },
   });
+});
+
+test("platform_request maps POST body and nested dataset path", async () => {
+  const server = buildServer();
+  const tool = server._registeredTools.platform_request;
+  let requestBody = null;
+  let urlSeen = "";
+
+  globalThis.fetch = async (url, options) => {
+    urlSeen = url;
+    requestBody = JSON.parse(options.body);
+    return jsonResponse(202, {
+      data: {
+        platform_request_id: "a1b2c3d4-e5f6-7890-abcd-ef1234567890",
+        status: "queued",
+      },
+      errors: [],
+    });
+  };
+
+  await tool.handler({
+    account_id: "42",
+    dataset_id: 9,
+    platform: "google_ads",
+    method: "GET",
+    path: "/customers/123/googleAds:searchStream",
+    connectorId: "hotglue_55",
+    query: { pageSize: "100" },
+  });
+
+  assert.match(urlSeen, /\/accounts\/42\/datasets\/9\/platform_request$/);
+  assert.deepEqual(requestBody.platformRequest, {
+    platform: "google_ads",
+    method: "GET",
+    path: "/customers/123/googleAds:searchStream",
+    connectorId: "hotglue_55",
+    query: { pageSize: "100" },
+  });
+});
+
+test("get_platform_request maps poll endpoint", async () => {
+  const server = buildServer();
+  const tool = server._registeredTools.get_platform_request;
+  let urlSeen = "";
+  const id = "a1b2c3d4-e5f6-7890-abcd-ef1234567890";
+
+  globalThis.fetch = async (url) => {
+    urlSeen = url;
+    return jsonResponse(200, {
+      data: { platform_request_id: id, status: "completed", body: { ok: true } },
+      errors: [],
+    });
+  };
+
+  const result = await tool.handler({
+    account_id: "self",
+    platform_request_id: id,
+  });
+
+  assert.match(urlSeen, new RegExp(`/accounts/self/platform_requests/${id}$`));
+  assert.equal(result.structuredContent.data.status, "completed");
+});
+
+test("run_platform_request POSTs then polls until terminal", async () => {
+  const server = buildServer();
+  const tool = server._registeredTools.run_platform_request;
+  const id = "a1b2c3d4-e5f6-7890-abcd-ef1234567890";
+  const calls = [];
+
+  globalThis.fetch = async (url, options) => {
+    calls.push({ url, method: options?.method || "GET" });
+    if (options?.method === "POST") {
+      return jsonResponse(202, {
+        data: { platform_request_id: id, status: "queued" },
+        errors: [],
+      });
+    }
+    if (calls.filter((c) => c.method === "GET").length < 2) {
+      return jsonResponse(200, { data: { platform_request_id: id, status: "running" }, errors: [] });
+    }
+    return jsonResponse(200, {
+      data: { platform_request_id: id, status: "completed", body: { rows: [] } },
+      errors: [],
+    });
+  };
+
+  const result = await tool.handler({
+    account_id: "self",
+    platform: "meta",
+    method: "GET",
+    path: "/act_123/insights",
+    connectorId: "hotglue_99",
+    poll_interval_ms: 1,
+    max_wait_ms: 5_000,
+  });
+
+  assert.equal(calls[0].method, "POST");
+  assert.match(calls[0].url, /\/accounts\/self\/platform_request$/);
+  assert.ok(calls.some((c) => c.method === "GET" && c.url.includes(`/platform_requests/${id}`)));
+  assert.equal(result.structuredContent.data.status, "completed");
 });
 
 test("create_query_execution defaults run_with_liquid to false", async () => {

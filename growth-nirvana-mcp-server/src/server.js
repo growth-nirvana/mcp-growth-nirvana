@@ -6,6 +6,11 @@ import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js"
 import { z } from "zod";
 import { getConfig } from "./config.js";
 import { railsGet, railsPatch, railsPost, railsPut, toToolError } from "./http.js";
+import {
+  platformRequestBody,
+  platformRequestPostPath,
+  pollPlatformRequestUntilTerminal,
+} from "./platform-request.js";
 
 const accountField = z.union([z.literal("self"), z.string().min(1), z.number()]);
 const accountOptional = z.object({ account_id: accountField.optional() });
@@ -48,6 +53,18 @@ const reportWriteAnnotations = {
   destructiveHint: false,
   idempotentHint: false,
   openWorldHint: true,
+};
+const platformEnum = z.enum(["google_ads", "meta", "tiktok", "microsoft_ads"]);
+const platformRequestFields = {
+  platform: platformEnum,
+  method: z.string().min(1),
+  path: z.string().min(1),
+  connectorId: z.string().optional(),
+  datasetId: z.union([z.string(), z.number()]).optional(),
+  dataset_id: z.union([z.string(), z.number()]).optional(),
+  query: jsonObject.optional(),
+  body: jsonObject.optional(),
+  maxBytes: z.number().int().positive().optional(),
 };
 
 const datasetInclude = z
@@ -163,7 +180,7 @@ function registerTool(server, config, name, meta, handler) {
 }
 
 export function createServer(config) {
-  const server = new McpServer({ name: "growth-nirvana-rails-mcp", version: "0.3.0" });
+  const server = new McpServer({ name: "growth-nirvana-rails-mcp", version: "0.3.1" });
 
   registerTool(
     server,
@@ -391,6 +408,104 @@ export function createServer(config) {
         undefined,
         accountId,
       );
+    },
+  );
+
+  registerTool(
+    server,
+    config,
+    "platform_request",
+    {
+      title: "Platform API Request",
+      description:
+        "POST platform_request (202 Accepted). Queues a policy-enforced live ad-platform HTTP call. Poll get_platform_request with platform_request_id. Scope: read:connectors. Requires Flipper :platform_api on the account.",
+      inputSchema: accountOptional.extend(platformRequestFields),
+      annotations: {
+        readOnlyHint: false,
+        destructiveHint: false,
+        idempotentHint: false,
+        openWorldHint: true,
+      },
+    },
+    async (args, request) => {
+      const accountId = normalizeAccountId(args.account_id, config);
+      return request(
+        "POST",
+        platformRequestPostPath(accountId, args),
+        {},
+        platformRequestBody(args),
+        accountId,
+      );
+    },
+  );
+
+  registerTool(
+    server,
+    config,
+    "get_platform_request",
+    {
+      title: "Get Platform API Request",
+      description:
+        "GET /accounts/:account_id/platform_requests/:platform_request_id. Poll queued platform_request status and vendor response body. Scope: read:connectors.",
+      inputSchema: accountOptional.extend({
+        platform_request_id: z.string().uuid(),
+        excludeBody: z.boolean().optional(),
+      }),
+      annotations: reportReadAnnotations,
+    },
+    async (args, request) => {
+      const accountId = normalizeAccountId(args.account_id, config);
+      return request(
+        "GET",
+        `/accounts/${accountId}/platform_requests/${args.platform_request_id}`,
+        args.excludeBody ? { excludeBody: true } : {},
+        undefined,
+        accountId,
+      );
+    },
+  );
+
+  registerTool(
+    server,
+    config,
+    "run_platform_request",
+    {
+      title: "Run Platform API Request",
+      description:
+        "POST platform_request then poll until completed or failed (or max_wait_ms). Prefer this over manual poll loops. Scope: read:connectors.",
+      inputSchema: accountOptional.extend({
+        ...platformRequestFields,
+        max_wait_ms: z.number().int().positive().optional(),
+        poll_interval_ms: z.number().int().positive().optional(),
+        excludeBody: z.boolean().optional(),
+      }),
+      annotations: {
+        readOnlyHint: false,
+        destructiveHint: false,
+        idempotentHint: false,
+        openWorldHint: true,
+      },
+    },
+    async (args, request) => {
+      const accountId = normalizeAccountId(args.account_id, config);
+      const queued = await request(
+        "POST",
+        platformRequestPostPath(accountId, args),
+        {},
+        platformRequestBody(args),
+        accountId,
+      );
+      const platformRequestId = queued?.data?.platform_request_id;
+      if (!platformRequestId) {
+        throw new Error("Missing platform_request_id in platform_request response");
+      }
+      return pollPlatformRequestUntilTerminal(request, {
+        accountId,
+        platformRequestId,
+        maxWaitMs: args.max_wait_ms ?? 120_000,
+        pollIntervalMs: args.poll_interval_ms ?? 1_000,
+        excludeBody: args.excludeBody ?? false,
+      });
     },
   );
 
