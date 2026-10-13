@@ -418,7 +418,7 @@ export function createServer(config) {
     {
       title: "Platform API Request",
       description:
-        "POST platform_request (202 Accepted). Queues a policy-enforced live ad-platform HTTP call. Poll get_platform_request with platform_request_id. Scope: read:connectors. Requires Flipper :platform_api on the account.",
+        "POST platform_request (202 Accepted). Queues a policy-enforced live ad-platform HTTP call. Poll get_platform_request with platform_request_id. Scope: read:connectors.",
       inputSchema: accountOptional.extend(platformRequestFields),
       annotations: {
         readOnlyHint: false,
