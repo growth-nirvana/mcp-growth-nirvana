@@ -6,6 +6,11 @@ import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js"
 import { z } from "zod";
 import { getConfig } from "./config.js";
 import { railsGet, railsPatch, railsPost, railsPut, toToolError } from "./http.js";
+import {
+  platformRequestBody,
+  platformRequestPostPath,
+  pollPlatformRequestUntilTerminal,
+} from "./platform-request.js";
 
 const accountField = z.union([z.literal("self"), z.string().min(1), z.number()]);
 const accountOptional = z.object({ account_id: accountField.optional() });
@@ -22,6 +27,8 @@ const contextPagingFields = {
 const idField = z.union([z.string(), z.number()]);
 const jsonObject = z.record(z.string(), z.any());
 const reportTemplatePayload = {
+  name: z.string().min(1),
+  description: z.string().optional(),
   queries: z.array(jsonObject).optional(),
   sections: z.array(jsonObject).optional(),
   defaultDateWindow: jsonObject.optional(),
@@ -31,11 +38,9 @@ const reportTemplatePayload = {
 const reportSpecPayload = {
   dataset_id: idField.optional(),
   templateId: idField.optional(),
-  queries: z.array(jsonObject).optional(),
-  sections: z.array(jsonObject).optional(),
-  defaultDateWindow: jsonObject.optional(),
-  brandKit: jsonObject.optional(),
-  schedule: jsonObject.optional(),
+  name: z.string().min(1).optional(),
+  overrides: jsonObject.optional(),
+  lastEditedBy: z.enum(["assistant", "user", "agent", "system"]).optional(),
 };
 const reportReadAnnotations = {
   readOnlyHint: true,
@@ -48,6 +53,18 @@ const reportWriteAnnotations = {
   destructiveHint: false,
   idempotentHint: false,
   openWorldHint: true,
+};
+const platformEnum = z.enum(["google_ads", "meta", "tiktok", "microsoft_ads"]);
+const platformRequestFields = {
+  platform: platformEnum,
+  method: z.string().min(1),
+  path: z.string().min(1),
+  connectorId: z.string().optional(),
+  datasetId: z.union([z.string(), z.number()]).optional(),
+  dataset_id: z.union([z.string(), z.number()]).optional(),
+  query: jsonObject.optional(),
+  body: jsonObject.optional(),
+  maxBytes: z.number().int().positive().optional(),
 };
 
 const datasetInclude = z
@@ -104,6 +121,8 @@ function normalizeAccountId(value, config) {
 function reportTemplateBody(args) {
   return {
     reportTemplate: {
+      name: args.name,
+      description: args.description,
       queries: args.queries,
       sections: args.sections,
       defaultDateWindow: args.defaultDateWindow,
@@ -116,13 +135,11 @@ function reportTemplateBody(args) {
 function reportSpecBody(args) {
   return {
     reportSpec: {
-      datasetId: args.dataset_id,
+      dataset_id: args.dataset_id,
       templateId: args.templateId,
-      queries: args.queries,
-      sections: args.sections,
-      defaultDateWindow: args.defaultDateWindow,
-      brandKit: args.brandKit,
-      schedule: args.schedule,
+      name: args.name,
+      overrides: args.overrides,
+      lastEditedBy: args.lastEditedBy,
     },
   };
 }
@@ -163,7 +180,7 @@ function registerTool(server, config, name, meta, handler) {
 }
 
 export function createServer(config) {
-  const server = new McpServer({ name: "growth-nirvana-rails-mcp", version: "0.3.0" });
+  const server = new McpServer({ name: "growth-nirvana-rails-mcp", version: "0.3.1" });
 
   registerTool(
     server,
@@ -391,6 +408,104 @@ export function createServer(config) {
         undefined,
         accountId,
       );
+    },
+  );
+
+  registerTool(
+    server,
+    config,
+    "platform_request",
+    {
+      title: "Platform API Request",
+      description:
+        "POST platform_request (202 Accepted). Queues a policy-enforced live ad-platform HTTP call. Poll get_platform_request with platform_request_id. Scope: read:connectors.",
+      inputSchema: accountOptional.extend(platformRequestFields),
+      annotations: {
+        readOnlyHint: false,
+        destructiveHint: false,
+        idempotentHint: false,
+        openWorldHint: true,
+      },
+    },
+    async (args, request) => {
+      const accountId = normalizeAccountId(args.account_id, config);
+      return request(
+        "POST",
+        platformRequestPostPath(accountId, args),
+        {},
+        platformRequestBody(args),
+        accountId,
+      );
+    },
+  );
+
+  registerTool(
+    server,
+    config,
+    "get_platform_request",
+    {
+      title: "Get Platform API Request",
+      description:
+        "GET /accounts/:account_id/platform_requests/:platform_request_id. Poll queued platform_request status and vendor response body. Scope: read:connectors.",
+      inputSchema: accountOptional.extend({
+        platform_request_id: z.string().uuid(),
+        excludeBody: z.boolean().optional(),
+      }),
+      annotations: reportReadAnnotations,
+    },
+    async (args, request) => {
+      const accountId = normalizeAccountId(args.account_id, config);
+      return request(
+        "GET",
+        `/accounts/${accountId}/platform_requests/${args.platform_request_id}`,
+        args.excludeBody ? { excludeBody: true } : {},
+        undefined,
+        accountId,
+      );
+    },
+  );
+
+  registerTool(
+    server,
+    config,
+    "run_platform_request",
+    {
+      title: "Run Platform API Request",
+      description:
+        "POST platform_request then poll until completed or failed (or max_wait_ms). Prefer this over manual poll loops. Scope: read:connectors.",
+      inputSchema: accountOptional.extend({
+        ...platformRequestFields,
+        max_wait_ms: z.number().int().positive().optional(),
+        poll_interval_ms: z.number().int().positive().optional(),
+        excludeBody: z.boolean().optional(),
+      }),
+      annotations: {
+        readOnlyHint: false,
+        destructiveHint: false,
+        idempotentHint: false,
+        openWorldHint: true,
+      },
+    },
+    async (args, request) => {
+      const accountId = normalizeAccountId(args.account_id, config);
+      const queued = await request(
+        "POST",
+        platformRequestPostPath(accountId, args),
+        {},
+        platformRequestBody(args),
+        accountId,
+      );
+      const platformRequestId = queued?.data?.platform_request_id;
+      if (!platformRequestId) {
+        throw new Error("Missing platform_request_id in platform_request response");
+      }
+      return pollPlatformRequestUntilTerminal(request, {
+        accountId,
+        platformRequestId,
+        maxWaitMs: args.max_wait_ms ?? 120_000,
+        pollIntervalMs: args.poll_interval_ms ?? 1_000,
+        excludeBody: args.excludeBody ?? false,
+      });
     },
   );
 
@@ -1390,15 +1505,7 @@ export function createServer(config) {
       title: "Create Report Spec",
       description:
         "POST /accounts/:account_id/report_specs. Scope: write:report_specs. Requires explicit user approval.",
-      inputSchema: accountOptional.extend({
-        dataset_id: idField,
-        templateId: idField.optional(),
-        queries: z.array(jsonObject).optional(),
-        sections: z.array(jsonObject).optional(),
-        defaultDateWindow: jsonObject.optional(),
-        brandKit: jsonObject.optional(),
-        schedule: jsonObject.optional(),
-      }),
+      inputSchema: accountOptional.extend(reportSpecPayload),
       annotations: reportWriteAnnotations,
     },
     async (args, request) => {
