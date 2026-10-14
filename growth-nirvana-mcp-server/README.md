@@ -297,7 +297,7 @@ Dataset search notes:
 
 Connector notes:
 
-- `get_connector` expects provider-prefixed connector ids like `fivetran_123` or `hotglue_456`
+- `get_connector` accepts `hotglue_456`, `fivetran_123`, or the bare numeric id (`456`). A bare number matches a Hotglue connection first.
 - endpoints are metadata/link-first and do not return plaintext secrets/tokens
 
 ## Dataset client config payload

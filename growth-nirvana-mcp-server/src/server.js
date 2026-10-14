@@ -396,8 +396,10 @@ export function createServer(config) {
     "get_connector",
     {
       title: "Get Connector",
-      description: "GET /accounts/:account_id/connectors/:id. Scope: read:connectors.",
-      inputSchema: accountOptional.extend({ connector_id: z.string().min(1) }),
+      description: "GET /accounts/:account_id/connectors/:id. Scope: read:connectors. connector_id may be hotglue_{id}, fivetran_{id}, or the bare numeric id (Hotglue is matched first).",
+      inputSchema: accountOptional.extend({
+        connector_id: z.union([z.string().min(1), z.number().int()]),
+      }),
     },
     async (args, request) => {
       const accountId = normalizeAccountId(args.account_id, config);
