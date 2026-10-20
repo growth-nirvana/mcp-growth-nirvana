@@ -98,7 +98,7 @@ Search and account-scoped tools:
 - `update_dataset_context(datasetId, datasetContext)` requires explicit user approval before use
 - `list_connectors(account_id, provider?, q?, status?, updated_since?, page?, per_page?)`
 - `get_connector(account_id, connector_id)`
-- `platform_request(account_id, platform, method, path, connectorId?, datasetId?, dataset_id?, query?, body?, maxBytes?)` — async queue (202); scope `read:connectors`
+- `platform_request(account_id, platform, method, path, connectorId?, datasetId?, dataset_id?, query?, body?, maxBytes?)` — async queue (202); scope `read:connectors`. `platform` is one of `google_ads`, `meta`, `tiktok`, `microsoft_ads`, `google_analytics_4`. GA4 paths are relative to the Data or Admin API (for example `POST /properties/{id}:runReport` with `dimensionFilter` in `body`, or `GET /accountSummaries`)
 - `get_platform_request(account_id, platform_request_id, excludeBody?)` — poll status and vendor response
 - `run_platform_request(...)` — same args as `platform_request` plus `max_wait_ms?`, `poll_interval_ms?`; POST then poll until `completed` or `failed`
 - `search_datasets(account_id, q, page?, per_page?, updated_since?, type?, enabled?)`

@@ -54,7 +54,7 @@ const reportWriteAnnotations = {
   idempotentHint: false,
   openWorldHint: true,
 };
-const platformEnum = z.enum(["google_ads", "meta", "tiktok", "microsoft_ads"]);
+const platformEnum = z.enum(["google_ads", "meta", "tiktok", "microsoft_ads", "google_analytics_4"]);
 const platformRequestFields = {
   platform: platformEnum,
   method: z.string().min(1),
@@ -416,11 +416,264 @@ export function createServer(config) {
   registerTool(
     server,
     config,
+    "get_connector_linked_source",
+    {
+      title: "Get Connector Linked Source",
+      description:
+        "GET Hotglue linked source config and field map with secrets removed. Scope: read:connectors.",
+      inputSchema: accountOptional.extend({
+        connector_id: z.union([z.string().min(1), z.number().int()]),
+      }),
+      annotations: reportReadAnnotations,
+    },
+    async (args, request) => {
+      const accountId = normalizeAccountId(args.account_id, config);
+      return request(
+        "GET",
+        `/accounts/${accountId}/connectors/${String(args.connector_id)}/linked_source`,
+        {},
+        undefined,
+        accountId,
+      );
+    },
+  );
+
+  registerTool(
+    server,
+    config,
+    "update_connector_linked_source",
+    {
+      title: "Update Connector Linked Source",
+      description:
+        "PATCH a Hotglue linked source. Blank fields are omitted so Hotglue does not wipe stored values. Each write saves a snapshot that restore_connector_linked_source can put back. Scope: write:hotglue_connections.",
+      inputSchema: accountOptional.extend({
+        connector_id: z.union([z.string().min(1), z.number().int()]),
+        config: jsonObject.optional(),
+        field_map: jsonObject.optional(),
+        fieldMap: jsonObject.optional(),
+      }),
+      annotations: reportWriteAnnotations,
+    },
+    async (args, request) => {
+      const accountId = normalizeAccountId(args.account_id, config);
+      const body = {};
+      if (args.config !== undefined) body.config = args.config;
+      const fieldMap = args.fieldMap ?? args.field_map;
+      if (fieldMap !== undefined) body.fieldMap = fieldMap;
+      return request(
+        "PATCH",
+        `/accounts/${accountId}/connectors/${String(args.connector_id)}/linked_source`,
+        {},
+        body,
+        accountId,
+      );
+    },
+  );
+
+  registerTool(
+    server,
+    config,
+    "add_connector_accounts",
+    {
+      title: "Add Connector Accounts",
+      description:
+        "Append account ids onto the Hotglue linked source. Does not replace the existing list. Blank fields are omitted. Each write saves a snapshot that restore_connector_linked_source can put back. Scope: write:hotglue_connections.",
+      inputSchema: accountOptional.extend({
+        connector_id: z.union([z.string().min(1), z.number().int()]),
+        account_ids: z.union([z.string(), z.array(z.union([z.string(), z.number()]))]),
+      }),
+      annotations: reportWriteAnnotations,
+    },
+    async (args, request) => {
+      const accountId = normalizeAccountId(args.account_id, config);
+      return request(
+        "POST",
+        `/accounts/${accountId}/connectors/${String(args.connector_id)}/linked_source/accounts`,
+        {},
+        { accountIds: args.account_ids },
+        accountId,
+      );
+    },
+  );
+
+  registerTool(
+    server,
+    config,
+    "list_connector_linked_source_snapshots",
+    {
+      title: "List Connector Linked Source Snapshots",
+      description:
+        "GET saved Hotglue linked source snapshots (id, time, account id count, field map keys). Scope: read:connectors.",
+      inputSchema: accountOptional.extend({
+        connector_id: z.union([z.string().min(1), z.number().int()]),
+      }),
+      annotations: reportReadAnnotations,
+    },
+    async (args, request) => {
+      const accountId = normalizeAccountId(args.account_id, config);
+      return request(
+        "GET",
+        `/accounts/${accountId}/connectors/${String(args.connector_id)}/linked_source_snapshots`,
+        {},
+        undefined,
+        accountId,
+      );
+    },
+  );
+
+  registerTool(
+    server,
+    config,
+    "restore_connector_linked_source",
+    {
+      title: "Restore Connector Linked Source",
+      description:
+        "Write a saved Hotglue linked source snapshot back. The current config is snapshotted first so the restore can be undone. Blank fields are omitted. Scope: write:hotglue_connections.",
+      inputSchema: accountOptional.extend({
+        connector_id: z.union([z.string().min(1), z.number().int()]),
+        snapshot_id: z.union([z.string().min(1), z.number().int()]),
+      }),
+      annotations: reportWriteAnnotations,
+    },
+    async (args, request) => {
+      const accountId = normalizeAccountId(args.account_id, config);
+      return request(
+        "POST",
+        `/accounts/${accountId}/connectors/${String(args.connector_id)}/linked_source_snapshots/${String(args.snapshot_id)}/restore`,
+        {},
+        {},
+        accountId,
+      );
+    },
+  );
+
+  registerTool(
+    server,
+    config,
+    "list_connector_jobs",
+    {
+      title: "List Connector Jobs",
+      description:
+        "GET Hotglue jobs for any connector. Returns job id, name, tap, status, and timestamps. Scope: read:connectors.",
+      inputSchema: accountOptional.extend({
+        connector_id: z.union([z.string().min(1), z.number().int()]),
+        count: z.number().int().positive().optional(),
+        page: z.number().int().positive().optional(),
+        from: z.string().optional(),
+        to: z.string().optional(),
+      }),
+      annotations: reportReadAnnotations,
+    },
+    async (args, request) => {
+      const accountId = normalizeAccountId(args.account_id, config);
+      return request(
+        "GET",
+        `/accounts/${accountId}/connectors/${String(args.connector_id)}/jobs`,
+        {
+          count: args.count,
+          page: args.page,
+          from: args.from,
+          to: args.to,
+        },
+        undefined,
+        accountId,
+      );
+    },
+  );
+
+  registerTool(
+    server,
+    config,
+    "run_connector_job",
+    {
+      title: "Run Connector Job",
+      description:
+        "POST a Hotglue job for any connector. Optional overrides apply to this job only and do not change the saved connection. Blank override fields are omitted. Scope: write:hotglue_connections.",
+      inputSchema: accountOptional.extend({
+        connector_id: z.union([z.string().min(1), z.number().int()]),
+        job_name: z.string().optional(),
+        jobName: z.string().optional(),
+        override_start_date: z.string().optional(),
+        overrideStartDate: z.string().optional(),
+        override_end_date: z.string().optional(),
+        overrideEndDate: z.string().optional(),
+        override_source_config: jsonObject.optional(),
+        overrideSourceConfig: jsonObject.optional(),
+        override_field_map: jsonObject.optional(),
+        overrideFieldMap: jsonObject.optional(),
+        override_selected_tables: jsonObject.optional(),
+        overrideSelectedTables: jsonObject.optional(),
+        override_target_config: jsonObject.optional(),
+        overrideTargetConfig: jsonObject.optional(),
+      }),
+      annotations: reportWriteAnnotations,
+    },
+    async (args, request) => {
+      const accountId = normalizeAccountId(args.account_id, config);
+      const body = {
+        jobName: args.jobName ?? args.job_name,
+        overrideStartDate: args.overrideStartDate ?? args.override_start_date,
+        overrideEndDate: args.overrideEndDate ?? args.override_end_date,
+        overrideSourceConfig: args.overrideSourceConfig ?? args.override_source_config,
+        overrideFieldMap: args.overrideFieldMap ?? args.override_field_map,
+        overrideSelectedTables: args.overrideSelectedTables ?? args.override_selected_tables,
+        overrideTargetConfig: args.overrideTargetConfig ?? args.override_target_config,
+      };
+      return request(
+        "POST",
+        `/accounts/${accountId}/connectors/${String(args.connector_id)}/jobs`,
+        {},
+        body,
+        accountId,
+      );
+    },
+  );
+
+  registerTool(
+    server,
+    config,
+    "kill_connector_job",
+    {
+      title: "Kill Connector Job",
+      description:
+        "POST to stop a running Hotglue job for any connector. Pass jobId from list_connector_jobs. Scope: write:hotglue_connections.",
+      inputSchema: accountOptional.extend({
+        connector_id: z.union([z.string().min(1), z.number().int()]),
+        job_id: z.string().min(1).optional(),
+        jobId: z.string().min(1).optional(),
+        job_root: z.string().min(1).optional(),
+        jobRoot: z.string().min(1).optional(),
+        external_job_id: z.string().min(1).optional(),
+        externalJobId: z.string().min(1).optional(),
+        reason: z.string().optional(),
+      }),
+      annotations: reportWriteAnnotations,
+    },
+    async (args, request) => {
+      const accountId = normalizeAccountId(args.account_id, config);
+      return request(
+        "POST",
+        `/accounts/${accountId}/connectors/${String(args.connector_id)}/jobs/kill`,
+        {},
+        {
+          jobId: args.jobId ?? args.job_id,
+          jobRoot: args.jobRoot ?? args.job_root,
+          externalJobId: args.externalJobId ?? args.external_job_id,
+          reason: args.reason,
+        },
+        accountId,
+      );
+    },
+  );
+
+  registerTool(
+    server,
+    config,
     "platform_request",
     {
       title: "Platform API Request",
       description:
-        "POST platform_request (202 Accepted). Queues a policy-enforced live ad-platform HTTP call. Poll get_platform_request with platform_request_id. Scope: read:connectors.",
+        "POST platform_request (202 Accepted). Queues a policy-enforced live ad or analytics platform HTTP call (Google Ads, Meta, TikTok, Microsoft Ads, GA4). Poll get_platform_request with platform_request_id. Scope: read:connectors.",
       inputSchema: accountOptional.extend(platformRequestFields),
       annotations: {
         readOnlyHint: false,

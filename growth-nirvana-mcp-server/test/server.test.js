@@ -358,6 +358,33 @@ test("platform_request maps POST body and nested dataset path", async () => {
   });
 });
 
+test("platform_request and run_platform_request accept google_analytics_4", () => {
+  const server = buildServer();
+  const args = {
+    account_id: "42",
+    platform: "google_analytics_4",
+    method: "POST",
+    path: "/properties/414689347:runReport",
+    connectorId: "hotglue_208",
+    body: {
+      dateRanges: [{ startDate: "7daysAgo", endDate: "today" }],
+      metrics: [{ name: "sessions" }],
+      dimensionFilter: {
+        filter: { fieldName: "sessionSource", stringFilter: { matchType: "EXACT", value: "google" } },
+      },
+    },
+  };
+
+  for (const name of ["platform_request", "run_platform_request"]) {
+    const parsed = server._registeredTools[name].inputSchema.safeParse(args);
+    assert.ok(parsed.success, `${name} rejected google_analytics_4`);
+    assert.deepEqual(parsed.data.body.dimensionFilter, args.body.dimensionFilter);
+  }
+
+  const rejected = server._registeredTools.platform_request.inputSchema.safeParse({ ...args, platform: "ga4" });
+  assert.equal(rejected.success, false);
+});
+
 test("get_platform_request maps poll endpoint", async () => {
   const server = buildServer();
   const tool = server._registeredTools.get_platform_request;
