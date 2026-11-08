@@ -180,7 +180,7 @@ function registerTool(server, config, name, meta, handler) {
 }
 
 export function createServer(config) {
-  const server = new McpServer({ name: "growth-nirvana-rails-mcp", version: "0.3.1" });
+  const server = new McpServer({ name: "growth-nirvana-rails-mcp", version: "0.4.0" });
 
   registerTool(
     server,
@@ -363,9 +363,10 @@ export function createServer(config) {
     "list_connectors",
     {
       title: "List Connectors",
-      description: "GET /accounts/:account_id/connectors. Scope: read:connectors.",
+      description:
+        "GET /accounts/:account_id/connectors: Fivetran, Hotglue and Aria connectors. provider filters to one. Aria rows (id aria_{id}) carry an aria object: run status and step, last error, schedule, accounts, streams. Scope: read:connectors.",
       inputSchema: accountOptional.extend({
-        provider: z.enum(["fivetran", "hotglue"]).optional(),
+        provider: z.enum(["fivetran", "hotglue", "aria"]).optional(),
         q: z.string().optional(),
         status: z.string().optional(),
         ...pagingFields,
@@ -396,7 +397,7 @@ export function createServer(config) {
     "get_connector",
     {
       title: "Get Connector",
-      description: "GET /accounts/:account_id/connectors/:id. Scope: read:connectors. connector_id may be hotglue_{id}, fivetran_{id}, or the bare numeric id (Hotglue is matched first).",
+      description: "GET /accounts/:account_id/connectors/:id. Scope: read:connectors. connector_id may be hotglue_{id}, fivetran_{id}, aria_{id}, or the bare numeric id (Hotglue is matched first; Aria needs its prefix).",
       inputSchema: accountOptional.extend({
         connector_id: z.union([z.string().min(1), z.number().int()]),
       }),
@@ -554,7 +555,7 @@ export function createServer(config) {
     {
       title: "List Connector Jobs",
       description:
-        "GET Hotglue jobs for any connector. Returns job id, name, tap, status, and timestamps. Scope: read:connectors.",
+        "GET jobs for a connector: Hotglue jobs (id, name, tap, status, timestamps), or for aria_{id} the Aria connection's run history (status, trigger, overrides, error, records, tables, times), newest first. Scope: read:connectors.",
       inputSchema: accountOptional.extend({
         connector_id: z.union([z.string().min(1), z.number().int()]),
         count: z.number().int().positive().optional(),
@@ -588,7 +589,7 @@ export function createServer(config) {
     {
       title: "Run Connector Job",
       description:
-        "POST a Hotglue job for any connector. Optional overrides apply to this job only and do not change the saved connection. Blank override fields are omitted. Scope: write:hotglue_connections.",
+        "POST a job. Hotglue: optional overrides apply to this job only and do not change the saved connection. Aria (connector_id aria_{id}): optional accounts (ids, some of the connection's), streams, override_start_date / override_end_date (re-sync that range and reset the bookmarks) and transform_only, for this run only; the run starts in the background (poll list_connector_jobs or get_connector). Blank fields are omitted. Scope: write:hotglue_connections.",
       inputSchema: accountOptional.extend({
         connector_id: z.union([z.string().min(1), z.number().int()]),
         job_name: z.string().optional(),
@@ -605,6 +606,10 @@ export function createServer(config) {
         overrideSelectedTables: jsonObject.optional(),
         override_target_config: jsonObject.optional(),
         overrideTargetConfig: jsonObject.optional(),
+        accounts: z.array(z.union([z.string(), z.number()])).optional(),
+        streams: z.array(z.string()).optional(),
+        transform_only: z.boolean().optional(),
+        transformOnly: z.boolean().optional(),
       }),
       annotations: reportWriteAnnotations,
     },
@@ -618,6 +623,9 @@ export function createServer(config) {
         overrideFieldMap: args.overrideFieldMap ?? args.override_field_map,
         overrideSelectedTables: args.overrideSelectedTables ?? args.override_selected_tables,
         overrideTargetConfig: args.overrideTargetConfig ?? args.override_target_config,
+        accounts: args.accounts?.map(String),
+        streams: args.streams,
+        transformOnly: args.transformOnly ?? args.transform_only,
       };
       return request(
         "POST",
@@ -636,7 +644,7 @@ export function createServer(config) {
     {
       title: "Kill Connector Job",
       description:
-        "POST to stop a running Hotglue job for any connector. Pass jobId from list_connector_jobs. Scope: write:hotglue_connections.",
+        "POST to stop a running job: Hotglue (pass jobId from list_connector_jobs), or an Aria connection's running sync (connector_id aria_{id}; no job id needed). Scope: write:hotglue_connections.",
       inputSchema: accountOptional.extend({
         connector_id: z.union([z.string().min(1), z.number().int()]),
         job_id: z.string().min(1).optional(),
@@ -666,6 +674,47 @@ export function createServer(config) {
     },
   );
 
+
+  registerTool(
+    server,
+    config,
+    "aria_connector_command",
+    {
+      title: "Aria Connector Command",
+      description:
+        "POST /accounts/:account_id/connector_commands/aria. Manage Aria connections (Google Ads, GA4, Meta on the Aria runner). command: create_connection (source_name google_ads | google_analytics_4 | facebook_ads, name, start_date), start_authorization (connection_id; returns authorization_url, a link the client opens to sign in without a Growth Nirvana login: shown once, 7 days, one sign-in), get_schedule / set_schedule (connection_id, cron, timezone, enabled; a blank cron removes the schedule). Runs and cancel are run_connector_job / kill_connector_job with connector_id aria_{id}. Needs the account's Aria flag. Scope: run:aria_connector_commands.",
+      inputSchema: accountOptional.extend({
+        command: z.enum(["create_connection", "start_authorization", "get_schedule", "set_schedule"]),
+        connection_id: z.union([z.string().min(1), z.number().int()]).optional(),
+        source_name: z.enum(["google_ads", "google_analytics_4", "facebook_ads"]).optional(),
+        name: z.string().optional(),
+        start_date: z.string().optional(),
+        cron: z.string().optional(),
+        timezone: z.string().optional(),
+        enabled: z.boolean().optional(),
+      }),
+      annotations: reportWriteAnnotations,
+    },
+    async (args, request) => {
+      const accountId = normalizeAccountId(args.account_id, config);
+      const payload = {
+        connection_id: args.connection_id === undefined ? undefined : String(args.connection_id),
+        source_name: args.source_name,
+        name: args.name,
+        start_date: args.start_date,
+        cron: args.cron,
+        timezone: args.timezone,
+        enabled: args.enabled,
+      };
+      return request(
+        "POST",
+        `/accounts/${accountId}/connector_commands/aria`,
+        {},
+        { command: args.command, payload },
+        accountId,
+      );
+    },
+  );
   registerTool(
     server,
     config,
@@ -673,7 +722,7 @@ export function createServer(config) {
     {
       title: "Platform API Request",
       description:
-        "POST platform_request (202 Accepted). Queues a policy-enforced live ad or analytics platform HTTP call (Google Ads, Meta, TikTok, Microsoft Ads, GA4). Poll get_platform_request with platform_request_id. Scope: read:connectors.",
+        "POST platform_request (202 Accepted). Queues a policy-enforced live ad or analytics platform HTTP call (Google Ads, Meta, TikTok, Microsoft Ads, GA4). connectorId is hotglue_{id} or aria_{id} (an Aria connection; its sign-in lives on the Aria runner), or pass datasetId. Poll get_platform_request with platform_request_id. Scope: read:connectors.",
       inputSchema: accountOptional.extend(platformRequestFields),
       annotations: {
         readOnlyHint: false,

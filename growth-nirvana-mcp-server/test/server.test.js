@@ -876,3 +876,63 @@ test("oauth report tools force account self", async () => {
   assert.match(urls[0], /\/accounts\/self\/report_specs\?dataset_id=9$/);
   assert.match(urls[1], /\/accounts\/self\/brand_kit$/);
 });
+
+test("list_connectors accepts the aria provider", async () => {
+  const server = buildServer();
+  let urlSeen = "";
+  globalThis.fetch = async (url) => {
+    urlSeen = url;
+    return jsonResponse(200, { data: [{ id: "aria_7", provider: "aria" }], errors: [] });
+  };
+
+  const result = await server._registeredTools.list_connectors.handler({ account_id: "42", provider: "aria" });
+
+  assert.match(urlSeen, /provider=aria/);
+  assert.equal(result.structuredContent.data[0].id, "aria_7");
+});
+
+test("run_connector_job sends an Aria run's accounts, streams, dates and transform_only", async () => {
+  const server = buildServer();
+  let seen;
+  globalThis.fetch = async (url, init) => {
+    seen = { url, method: init.method, body: JSON.parse(init.body) };
+    return jsonResponse(202, { data: { status: "requested" }, errors: [] });
+  };
+
+  await server._registeredTools.run_connector_job.handler({
+    account_id: "42",
+    connector_id: "aria_7",
+    accounts: [1402186800],
+    streams: ["stream_campaign"],
+    override_start_date: "2026-10-01",
+    override_end_date: "2026-10-07",
+  });
+
+  assert.match(seen.url, /\/accounts\/42\/connectors\/aria_7\/jobs$/);
+  assert.equal(seen.method, "POST");
+  assert.deepEqual(seen.body.accounts, ["1402186800"]);
+  assert.deepEqual(seen.body.streams, ["stream_campaign"]);
+  assert.equal(seen.body.overrideStartDate, "2026-10-01");
+  assert.equal(seen.body.overrideEndDate, "2026-10-07");
+});
+
+test("aria_connector_command posts the command and its payload", async () => {
+  const server = buildServer();
+  assert.ok(Object.keys(server._registeredTools).includes("aria_connector_command"));
+  let seen;
+  globalThis.fetch = async (url, init) => {
+    seen = { url, body: JSON.parse(init.body) };
+    return jsonResponse(200, { data: { authorization_url: "https://app.growthnirvana.com/authorize/gnauth_x" }, errors: [] });
+  };
+
+  const result = await server._registeredTools.aria_connector_command.handler({
+    account_id: "42",
+    command: "start_authorization",
+    connection_id: 7,
+  });
+
+  assert.match(seen.url, /\/accounts\/42\/connector_commands\/aria$/);
+  assert.equal(seen.body.command, "start_authorization");
+  assert.equal(seen.body.payload.connection_id, "7");
+  assert.match(result.structuredContent.data.authorization_url, /\/authorize\//);
+});
