@@ -64,6 +64,19 @@ Claude discovers Growth Nirvana Rails from the protected-resource metadata, comp
 
 Rails must also expose authorization-server metadata at `GET /.well-known/oauth-authorization-server` and enforce OAuth activity, scopes, account binding, and revocation.
 
+### One sign-in, all of a user's accounts
+
+A Claude sign-in belongs to the user, not to one account (growth-nirvana-ui #3606):
+
+- At consent the user picks **All my accounts** (default) or one account. Write and run permissions are unticked boxes; reads are always granted.
+- Every tool takes `account_id`. Rails checks the user's current membership in that account on every call; a non-member gets the same `404` as a missing account. Report viewers and guests get no MCP access.
+- `account_id="self"` (the default) works only when the user has exactly one account. Otherwise Rails returns `422 account_required` with the accounts listed, and the tool error says to ask the user which one.
+- `list_my_accounts(q?, page?, per_page?)` lists the accounts this sign-in can use as `{id, name, role}`.
+- Every account-scoped result carries `account: {id, name}` (from Rails' `X-GN-Account-Id` / `X-GN-Account-Name` headers, sent only after access was granted), so Claude can say which client the data came from.
+- A tool that needs a permission the sign-in didn't grant returns `insufficient_scope` with `required_scope`; the user reconnects and ticks it.
+- Each Rails call carries `X-MCP-Tool: <tool name>` for the audit log. Tokens are never logged.
+- Older one-account sign-ins keep working, limited to their account.
+
 ## Internal API-key behavior
 
 In the default `internal` auth mode, each Rails request sends:
@@ -76,6 +89,7 @@ Key semantics enforced by Rails:
 - master key: can operate across accounts
 - client key: restricted to its own account
 - account-scoped tools support `account_id="self"` (default when omitted)
+- this mode is unchanged by the OAuth multi-account work; results now also carry `account: {id, name}`
 
 ## Vercel deployment
 
@@ -85,17 +99,18 @@ Use Streamable HTTP as the primary transport on Vercel. The implementation is st
 
 ## Tool set
 
-Master discovery tool:
+Account discovery:
 
-- `search_accounts(q, page?, per_page?)`
+- `list_my_accounts(q?, page?, per_page?)`: the accounts this sign-in (or client key) can use
+- `search_accounts(q, page?, per_page?)`: all of Growth Nirvana, master key only
 
 Search and account-scoped tools:
 
-- `browse_dataset_contexts(page?, perPage?, includeReporting?, includeAdClientDatasets?)`
-- `search_dataset_contexts(q, page?, perPage?)`
-- `get_dataset_context(datasetId, includeSql?, sqlModels?)`
-- `suggest_dataset_context(datasetId)`
-- `update_dataset_context(datasetId, datasetContext)` requires explicit user approval before use
+- `browse_dataset_contexts(account_id, page?, perPage?, includeReporting?, includeAdClientDatasets?)`
+- `search_dataset_contexts(account_id, q, page?, perPage?)`
+- `get_dataset_context(account_id, datasetId, includeSql?, sqlModels?)`
+- `suggest_dataset_context(account_id, datasetId)`
+- `update_dataset_context(account_id, datasetId, datasetContext)` requires explicit user approval before use
 - `list_connectors(account_id, provider?, q?, status?, updated_since?, page?, per_page?)`. `provider` is `fivetran`, `hotglue` or `aria`. Aria rows (`aria_{id}`) carry an `aria` object (run status, schedule, accounts, streams)
 - `get_connector(account_id, connector_id)`. `connector_id` may be `hotglue_{id}`, `fivetran_{id}` or `aria_{id}`
 - `list_connector_jobs` / `run_connector_job` / `kill_connector_job` with `connector_id: aria_{id}`: the run history; a run with optional `accounts`, `streams`, `override_start_date` / `override_end_date`, `transform_only` (this run only); cancel the running sync

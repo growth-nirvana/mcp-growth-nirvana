@@ -115,3 +115,16 @@ test("vercel rewrite targets route to the shared mcp function", () => {
     ["/.well-known/oauth-protected-resource/mcp", "/api/mcp"],
   ]);
 });
+
+test("initialize tells the client to ask which account when there are several", async () => {
+  const response = await handleWebRequest(
+    mcpRequest("/mcp", { authorization: "Bearer oauth-token" }),
+    buildConfig(),
+  );
+
+  assert.equal(response.status, 200);
+  const body = await response.json();
+  assert.match(body.result.instructions, /list_my_accounts/);
+  assert.match(body.result.instructions, /ask them; never guess/);
+  assert.equal(body.result.serverInfo.version, "1.4.0");
+});

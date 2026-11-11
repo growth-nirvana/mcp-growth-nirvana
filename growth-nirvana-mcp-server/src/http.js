@@ -27,6 +27,27 @@ function parseRailsError(body) {
   };
 }
 
+// Rails names the account a response came from in X-GN-Account-Id / X-GN-Account-Name.
+export function accountFromHeaders(headers) {
+  const id = headers?.get?.("x-gn-account-id");
+  if (!id) return null;
+  const rawName = headers.get("x-gn-account-name") || "";
+  let name = rawName;
+  try {
+    name = decodeURIComponent(rawName);
+  } catch (_err) {
+    name = rawName;
+  }
+  const numericId = Number(id);
+  return { id: Number.isSafeInteger(numericId) ? numericId : id, name };
+}
+
+function withResponseAccount(body, response) {
+  const account = accountFromHeaders(response?.headers);
+  if (!account || !body || typeof body !== "object" || Array.isArray(body)) return body;
+  return { ...body, account };
+}
+
 function parseJsonSafe(text) {
   try {
     return JSON.parse(text);
@@ -39,10 +60,14 @@ function shouldRetry(status) {
   return RETRYABLE_STATUS.has(status);
 }
 
-function buildAuthHeaders({ authMode, apiKey, oauthBearerToken }) {
+const TOOL_NAME_PATTERN = /^[A-Za-z0-9_.:-]{1,100}$/;
+
+function buildAuthHeaders({ authMode, apiKey, oauthBearerToken, toolName }) {
   const headers = {
     Accept: "application/json",
   };
+  // Rails records the tool in its audit log for every call.
+  if (toolName && TOOL_NAME_PATTERN.test(toolName)) headers["X-MCP-Tool"] = toolName;
 
   if (authMode === "oauth") {
     headers.Authorization = `Bearer ${oauthBearerToken}`;
@@ -59,6 +84,7 @@ export async function railsGet({
   authMode,
   apiKey,
   oauthBearerToken,
+  toolName,
   path,
   params,
   accountId,
@@ -72,6 +98,7 @@ export async function railsGet({
     authMode,
     apiKey,
     oauthBearerToken,
+    toolName,
     path,
     params,
     accountId,
@@ -86,6 +113,7 @@ export async function railsPost({
   authMode,
   apiKey,
   oauthBearerToken,
+  toolName,
   path,
   params,
   body,
@@ -100,6 +128,7 @@ export async function railsPost({
     authMode,
     apiKey,
     oauthBearerToken,
+    toolName,
     path,
     params,
     body,
@@ -115,6 +144,7 @@ export async function railsPatch({
   authMode,
   apiKey,
   oauthBearerToken,
+  toolName,
   path,
   params,
   body,
@@ -129,6 +159,7 @@ export async function railsPatch({
     authMode,
     apiKey,
     oauthBearerToken,
+    toolName,
     path,
     params,
     body,
@@ -144,6 +175,7 @@ export async function railsPut({
   authMode,
   apiKey,
   oauthBearerToken,
+  toolName,
   path,
   params,
   body,
@@ -158,6 +190,7 @@ export async function railsPut({
     authMode,
     apiKey,
     oauthBearerToken,
+    toolName,
     path,
     params,
     body,
@@ -174,6 +207,7 @@ export async function railsRequest({
   authMode = "internal",
   apiKey,
   oauthBearerToken,
+  toolName,
   path,
   params,
   body: requestBody,
@@ -191,7 +225,7 @@ export async function railsRequest({
     const timeout = setTimeout(() => controller.abort(), timeoutMs);
 
     try {
-      const headers = buildAuthHeaders({ authMode, apiKey, oauthBearerToken });
+      const headers = buildAuthHeaders({ authMode, apiKey, oauthBearerToken, toolName });
       const hasBody = requestBody !== undefined;
       if (hasBody) {
         headers["Content-Type"] = "application/json";
@@ -241,7 +275,7 @@ export async function railsRequest({
         `[growth-nirvana-mcp] url=${url} account_id=${accountId} status=${response.status} error_code=none error_message=none`,
       );
 
-      return parsedBody;
+      return withResponseAccount(parsedBody, response);
     } catch (error) {
       clearTimeout(timeout);
       if (error?.name === "AbortError") {
@@ -255,6 +289,22 @@ export async function railsRequest({
   }
 }
 
+function nextStepFor(code, status) {
+  if (code === "account_required") {
+    return "The user has several Growth Nirvana accounts. Ask which one (errors[0].accounts lists them), then retry with that account_id.";
+  }
+  if (code === "insufficient_scope") {
+    return "This sign-in is read-only for this action. Tell the user which permission is needed (errors[0].required_scope_label); they can reconnect Growth Nirvana and tick it on the consent screen.";
+  }
+  if (code === "mcp_role_not_allowed" || code === "no_mcp_accounts") {
+    return "The user's role doesn't include MCP access in this account. An account admin can change the role.";
+  }
+  if (status === 404) {
+    return "Not found, or not an account this user belongs to. Call list_my_accounts to see which accounts are available.";
+  }
+  return null;
+}
+
 export function toToolError(error) {
   const status = error?.status;
   const code = error?.code || "unknown_error";
@@ -262,7 +312,12 @@ export function toToolError(error) {
   const errors = Array.isArray(error?.errors) ? error.errors : [];
 
   const statusHint =
-    status === 401
+    code === "account_required" ||
+    code === "insufficient_scope" ||
+    code === "mcp_role_not_allowed" ||
+    code === "no_mcp_accounts"
+      ? code
+      : status === 401
       ? code === "invalid_token"
         ? "invalid_token"
         : "invalid_or_missing_key"
@@ -289,6 +344,7 @@ export function toToolError(error) {
               status_hint: statusHint,
               code,
               message,
+              next_step: nextStepFor(code, status),
               errors,
               raw_body: error?.raw_body || null,
             },

@@ -134,7 +134,7 @@ test("oauth tool calls forward request bearer token to Rails", async () => {
   assert.equal(apiKeyHeader, undefined);
 });
 
-test("oauth account-scoped tools force account_id to self", async () => {
+test("oauth account-scoped tools pass the requested account_id through", async () => {
   const server = createServer({
     baseUrl: "https://example.com/api/v1/mcp",
     authMode: "oauth",
@@ -151,7 +151,9 @@ test("oauth account-scoped tools force account_id to self", async () => {
   };
 
   await tool.handler({ account_id: "42", page: 1, per_page: 25 });
+  assert.match(urlSeen, /\/accounts\/42\/datasets\?/);
 
+  await tool.handler({ page: 1, per_page: 25 });
   assert.match(urlSeen, /\/accounts\/self\/datasets\?/);
 });
 
@@ -853,7 +855,7 @@ test("report run, published report, and brand kit tools map endpoints", async ()
   assert.equal(requests[7].body.brandKit.fonts.heading, "Inter");
 });
 
-test("oauth report tools force account self", async () => {
+test("oauth report tools use the requested account", async () => {
   const server = createServer({
     baseUrl: "https://example.com/api/v1/mcp",
     authMode: "oauth",
@@ -873,8 +875,8 @@ test("oauth report tools force account self", async () => {
   await listTool.handler({ account_id: "42", dataset_id: "9" });
   await updateBrandTool.handler({ account_id: "42", brandKit: { colors: { primary: "#111111" } } });
 
-  assert.match(urls[0], /\/accounts\/self\/report_specs\?dataset_id=9$/);
-  assert.match(urls[1], /\/accounts\/self\/brand_kit$/);
+  assert.match(urls[0], /\/accounts\/42\/report_specs\?dataset_id=9$/);
+  assert.match(urls[1], /\/accounts\/42\/brand_kit$/);
 });
 
 test("list_connectors accepts the aria provider", async () => {
@@ -935,4 +937,171 @@ test("aria_connector_command posts the command and its payload", async () => {
   assert.equal(seen.body.command, "start_authorization");
   assert.equal(seen.body.payload.connection_id, "7");
   assert.match(result.structuredContent.data.authorization_url, /\/authorize\//);
+});
+
+function oauthServer() {
+  return createServer({
+    baseUrl: "https://example.com/api/v1/mcp",
+    authMode: "oauth",
+    oauthBearerToken: "oauth-token",
+    timeoutMs: 1000,
+    maxRetries: 0,
+  });
+}
+
+function jsonResponseWithHeaders(status, payload, headers) {
+  return { ...jsonResponse(status, payload), headers: new Headers(headers) };
+}
+
+test("list_my_accounts calls /me/accounts with the user's bearer token", async () => {
+  const server = oauthServer();
+  let urlSeen = "";
+  let headersSeen = {};
+  globalThis.fetch = async (url, options) => {
+    urlSeen = url;
+    headersSeen = options.headers;
+    return jsonResponse(200, {
+      data: [
+        { id: 1, name: "Alpha Client", role: "manager" },
+        { id: 2, name: "Bravo Client", role: "contributor" },
+      ],
+      meta: { page: 1, per_page: 100, total: 2, all_accounts: true },
+      errors: [],
+    });
+  };
+
+  const result = await server._registeredTools.list_my_accounts.handler({ q: "client" });
+
+  assert.equal(urlSeen, "https://example.com/api/v1/mcp/me/accounts?q=client");
+  assert.equal(headersSeen.Authorization, "Bearer oauth-token");
+  assert.equal(headersSeen["X-MCP-Tool"], "list_my_accounts");
+  assert.deepEqual(
+    result.structuredContent.data.map((row) => row.name),
+    ["Alpha Client", "Bravo Client"],
+  );
+});
+
+test("dataset context tools take account_id", async () => {
+  const server = oauthServer();
+  const urls = [];
+  globalThis.fetch = async (url) => {
+    urls.push(url);
+    return jsonResponse(200, { data: {}, errors: [] });
+  };
+
+  await server._registeredTools.browse_dataset_contexts.handler({ account_id: 7 });
+  await server._registeredTools.search_dataset_contexts.handler({ account_id: "7", q: "spend" });
+  await server._registeredTools.get_dataset_context.handler({ account_id: "7", datasetId: 3 });
+  await server._registeredTools.suggest_dataset_context.handler({ account_id: "7", datasetId: 3 });
+  await server._registeredTools.update_dataset_context.handler({
+    account_id: "7",
+    datasetId: 3,
+    datasetContext: { summary: "x" },
+  });
+
+  assert.equal(urls.length, 5);
+  for (const url of urls) assert.match(url, /\/accounts\/7\//);
+});
+
+test("every account-scoped tool accepts account_id", () => {
+  const server = oauthServer();
+  const accountless = new Set(["list_my_accounts", "search_accounts"]);
+  for (const [name, tool] of Object.entries(server._registeredTools)) {
+    if (accountless.has(name)) continue;
+    const shape = tool.inputSchema?.shape || tool.inputSchema?._def?.shape?.() || {};
+    assert.ok("account_id" in shape, `${name} has no account_id`);
+  }
+});
+
+test("account_id descriptions tell Claude to ask which account", () => {
+  const server = oauthServer();
+  const description = server._registeredTools.list_datasets.inputSchema.shape.account_id.description
+    || server._registeredTools.list_datasets.inputSchema.shape.account_id.unwrap().description;
+  assert.match(description, /ask them/);
+  assert.match(server._registeredTools.list_my_accounts.description, /ask the user which account/);
+});
+
+test("results name the account they came from", async () => {
+  const server = oauthServer();
+  globalThis.fetch = async () =>
+    jsonResponseWithHeaders(
+      200,
+      { data: [{ id: 5 }], meta: { page: 1 }, errors: [] },
+      { "X-GN-Account-Id": "42", "X-GN-Account-Name": "Caf%C3%A9%20%26%20Co" },
+    );
+
+  const result = await server._registeredTools.list_datasets.handler({ account_id: "42" });
+
+  assert.deepEqual(result.structuredContent.account, { id: 42, name: "Café & Co" });
+  assert.equal(JSON.parse(result.content[0].text).account.name, "Café & Co");
+});
+
+test("self with several accounts returns account_required with the accounts", async () => {
+  const server = oauthServer();
+  globalThis.fetch = async () =>
+    jsonResponse(422, {
+      data: null,
+      errors: [
+        {
+          code: "account_required",
+          message: "You have access to 2 accounts. Pass one account_id; list_my_accounts lists them.",
+          accounts: [
+            { id: 1, name: "Alpha Client", role: "manager" },
+            { id: 2, name: "Bravo Client", role: "owner" },
+          ],
+        },
+      ],
+    });
+
+  const result = await server._registeredTools.list_datasets.handler({});
+  const error = JSON.parse(result.content[0].text).error;
+
+  assert.equal(result.isError, true);
+  assert.equal(error.status_hint, "account_required");
+  assert.match(error.next_step, /Ask which one/);
+  assert.deepEqual(error.errors[0].accounts.map((row) => row.id), [1, 2]);
+});
+
+test("a missing write or run permission comes back as a clear needs-permission error", async () => {
+  const server = oauthServer();
+  globalThis.fetch = async () =>
+    jsonResponse(403, {
+      data: null,
+      errors: [
+        {
+          code: "insufficient_scope",
+          message: "This needs the 'Run query executions' permission (run:query_executions).",
+          required_scope: "run:query_executions",
+          required_scope_label: "Run query executions",
+          scope: "read:datasets run:query_executions",
+        },
+      ],
+    });
+
+  const result = await server._registeredTools.create_query_execution.handler({
+    account_id: "42",
+    query: "select 1",
+  });
+  const error = JSON.parse(result.content[0].text).error;
+
+  assert.equal(error.status_hint, "insufficient_scope");
+  assert.equal(error.errors[0].required_scope, "run:query_executions");
+  assert.match(error.next_step, /reconnect Growth Nirvana/);
+});
+
+test("api-key mode is unchanged: key headers, self default, explicit account kept", async () => {
+  const server = buildServer();
+  const seen = [];
+  globalThis.fetch = async (url, options) => {
+    seen.push({ url, headers: options.headers });
+    return jsonResponse(200, { data: [], errors: [] });
+  };
+
+  await server._registeredTools.list_datasets.handler({});
+  await server._registeredTools.list_datasets.handler({ account_id: "42" });
+
+  assert.match(seen[0].url, /\/accounts\/self\/datasets/);
+  assert.match(seen[1].url, /\/accounts\/42\/datasets/);
+  assert.equal(seen[0].headers.Authorization, "Bearer secret");
+  assert.equal(seen[0].headers["X-API-Key"], "secret");
 });
