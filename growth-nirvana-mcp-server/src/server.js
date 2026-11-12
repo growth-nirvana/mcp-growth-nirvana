@@ -58,7 +58,9 @@ const reportWriteAnnotations = {
   idempotentHint: false,
   openWorldHint: true,
 };
-const platformEnum = z.enum(["google_ads", "meta", "tiktok", "microsoft_ads", "google_analytics_4"]);
+const platformEnum = z.enum(["google_ads", "meta", "tiktok", "microsoft_ads", "google_analytics_4", "linkedin_ads"]);
+const LINKEDIN_PLATFORM_NOTE =
+  "linkedin_ads paths are Rest.li paths under /rest/ (for example GET /rest/adAccounts/{id}/adCampaigns?q=search, or GET /rest/adAnalytics?q=analytics&pivot=CAMPAIGN&timeGranularity=DAILY&dateRange=...&accounts=List(urn%3Ali%3AsponsorAccount%3A{id})&fields=impressions,clicks,costInLocalCurrency). Media downloads from media.licdn.com need no auth; downloads are capped at 10MB.";
 const platformRequestFields = {
   platform: platformEnum,
   method: z.string().min(1),
@@ -126,7 +128,7 @@ export function normalizeAccountId(value) {
   return String(value);
 }
 
-export const SERVER_VERSION = "1.4.0";
+export const SERVER_VERSION = "1.5.0";
 const SERVER_INSTRUCTIONS = [
   "A Growth Nirvana user can belong to several client accounts, and one sign-in covers all of them.",
   "Before account tools, call list_my_accounts unless the user already named the account. If it returns more than one account and the user hasn't said which, ask them; never guess.",
@@ -775,7 +777,7 @@ export function createServer(config) {
     {
       title: "Platform API Request",
       description:
-        "POST platform_request (202 Accepted). Queues a policy-enforced live ad or analytics platform HTTP call (Google Ads, Meta, TikTok, Microsoft Ads, GA4). connectorId is hotglue_{id} or aria_{id} (an Aria connection; its sign-in lives on the Aria runner), or pass datasetId. Poll get_platform_request with platform_request_id. Scope: read:connectors.",
+        `POST platform_request (202 Accepted). Queues a policy-enforced live ad or analytics platform HTTP call (Google Ads, Meta, TikTok, Microsoft Ads, GA4, LinkedIn Ads). Useful for checking report numbers (and warehouse numbers) against the platform API. ${LINKEDIN_PLATFORM_NOTE} connectorId is hotglue_{id} or aria_{id} (an Aria connection; its sign-in lives on the Aria runner), or pass datasetId. Poll get_platform_request with platform_request_id. Scope: read:connectors.`,
       inputSchema: accountOptional.extend(platformRequestFields),
       annotations: {
         readOnlyHint: false,
@@ -829,7 +831,7 @@ export function createServer(config) {
     {
       title: "Run Platform API Request",
       description:
-        "POST platform_request then poll until completed or failed (or max_wait_ms). Prefer this over manual poll loops. Scope: read:connectors.",
+        `POST platform_request then poll until completed or failed (or max_wait_ms). Prefer this over manual poll loops. Platforms: Google Ads, Meta, TikTok, Microsoft Ads, GA4, LinkedIn Ads; useful for checking report numbers against the platform API. ${LINKEDIN_PLATFORM_NOTE} Scope: read:connectors.`,
       inputSchema: accountOptional.extend({
         ...platformRequestFields,
         max_wait_ms: z.number().int().positive().optional(),

@@ -387,6 +387,46 @@ test("platform_request and run_platform_request accept google_analytics_4", () =
   assert.equal(rejected.success, false);
 });
 
+test("platform_request and run_platform_request accept linkedin_ads Rest.li paths", async () => {
+  const server = buildServer();
+  const args = {
+    account_id: "42",
+    platform: "linkedin_ads",
+    method: "GET",
+    path: "/rest/adAccounts/512345678/adCampaigns",
+    connectorId: "aria_77",
+    query: { q: "search" },
+  };
+
+  for (const name of ["platform_request", "run_platform_request"]) {
+    const tool = server._registeredTools[name];
+    assert.ok(tool.inputSchema.safeParse(args).success, `${name} rejected linkedin_ads`);
+    assert.match(tool.description, /LinkedIn Ads/);
+    assert.match(tool.description, /\/rest\//);
+    assert.match(tool.description, /media\.licdn\.com/);
+    assert.match(tool.description, /10MB/);
+    assert.match(tool.description, /report numbers/);
+  }
+
+  let urlSeen = "";
+  let requestBody = null;
+  globalThis.fetch = async (url, options) => {
+    urlSeen = url;
+    requestBody = JSON.parse(options.body);
+    return jsonResponse(202, {
+      data: { platform_request_id: "a1b2c3d4-e5f6-7890-abcd-ef1234567890", status: "queued" },
+      errors: [],
+    });
+  };
+
+  await server._registeredTools.platform_request.handler(args);
+
+  assert.match(urlSeen, /\/accounts\/42\/platform_request$/);
+  assert.equal(requestBody.platformRequest.platform, "linkedin_ads");
+  assert.equal(requestBody.platformRequest.path, "/rest/adAccounts/512345678/adCampaigns");
+  assert.deepEqual(requestBody.platformRequest.query, { q: "search" });
+});
+
 test("get_platform_request maps poll endpoint", async () => {
   const server = buildServer();
   const tool = server._registeredTools.get_platform_request;
