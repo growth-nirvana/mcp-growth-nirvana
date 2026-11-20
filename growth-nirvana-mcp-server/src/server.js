@@ -128,13 +128,99 @@ export function normalizeAccountId(value) {
   return String(value);
 }
 
-export const SERVER_VERSION = "1.5.0";
+export const SERVER_VERSION = "1.6.0";
 const SERVER_INSTRUCTIONS = [
   "A Growth Nirvana user can belong to several client accounts, and one sign-in covers all of them.",
   "Before account tools, call list_my_accounts unless the user already named the account. If it returns more than one account and the user hasn't said which, ask them; never guess.",
   "Pass that account's id as account_id on every call. Each result has an `account` {id, name}: say which client the data came from, and don't mix clients in one answer unless the user asked to compare them.",
   "An insufficient_scope error means this sign-in is read-only for that action: tell the user which permission is needed and that they can reconnect Growth Nirvana and tick it on the consent screen.",
 ].join(" ");
+
+export const ARIA_COMMANDS = [
+  "list_connector_types",
+  "get_connection",
+  "create_connection",
+  "configure_connection",
+  "request_credentials",
+  "start_authorization",
+  "get_inbox_address",
+  "get_schedule",
+  "set_schedule",
+  "set_run_after",
+  "check_hotglue_sign_in",
+  "copy_hotglue_sign_in",
+];
+
+const ARIA_COMMAND_DESCRIPTION = [
+  "POST /accounts/:account_id/connector_commands/aria. Set up and manage Aria connections from start to finish (Google Ads, GA4, Meta, HubSpot, TikTok, LinkedIn Ads, S3 files, Google Sheets, FranConnect, The Trade Desk reports). A person only opens a link when the source needs one.",
+  "Flow: list_connector_types (source_name or connector_key optional; each kind's sign_in: oauth | credential | inbox | none | imported, next_step, required_settings, streams, login field names; one kind adds its config_schema) ->",
+  "create_connection (source_name, name, start_date, config in runner shape; returns connector_id aria_{id} and next_step) ->",
+  "the sign-in: start_authorization for oauth (connection_id; returns authorization_url for the client, 7 days), request_credentials for credential (connection_id; returns credentials_url, a one-time page where the person types the login, and expires_at), get_inbox_address for inbox (connection_id; the address to send or forward the report emails to), Google Sheets: share each sheet with share_with_email ->",
+  "configure_connection (connection_id, config keys to set or null to remove, streams, all_streams, start_date, name; keeps everything else) ->",
+  "set_schedule (connection_id, cron, timezone, enabled; blank cron removes it) and set_run_after (dataset_id, connection_id or null to turn off, cron_expression, enabled: the dataset runs after each sync that loaded rows).",
+  "get_connection (connection_id) shows config without secrets, signed_in, auth_status, streams, schedule, last runs and the datasets that run after it; get_schedule reads the schedule.",
+  "Never put a password, token, API key or access key in config: it is refused (secret_in_config); use request_credentials so the person types it on the runner's page. Links are shown once: pass them on, don't store them.",
+  "check_hotglue_sign_in / copy_hotglue_sign_in (hotglue_connection_id, source_name, name, start_date, account_ids) reuse a Hotglue Google Ads or Facebook sign-in for a new Aria connection.",
+  "Runs and cancel are run_connector_job / kill_connector_job with connector_id aria_{id}.",
+  "Scopes: read:aria_connections for list_connector_types, get_connection, get_schedule; write:aria_connections for the rest; write:aria_hotglue_sign_in_copy for the Hotglue sign-in commands. Writes need a GN support user and every command but get_schedule the account's Aria flag.",
+].join(" ");
+
+export const HOTGLUE_COMMANDS = [
+  "get_schedule",
+  "set_schedule",
+  "trigger_sync",
+  "start_authorization",
+  "scout_google_ads_accounts",
+  "reconcile_google_ads_account_history",
+  "discover_platform_accounts",
+  "approve_platform_accounts",
+  "sync_approved_platform_accounts",
+];
+
+const HOTGLUE_COMMAND_DESCRIPTION = [
+  "POST /accounts/:account_id/connector_commands/hotglue. Commands on one of the account's Hotglue connections (connection_id hotglue_{id} or {id}; removed connections are refused).",
+  "get_schedule (connection_id, connector_id optional): the schedule Hotglue has now. set_schedule (connection_id, schedule_expression as UTC cron, state ENABLED | DISABLED, connector_id optional): returns previous_schedule and the schedule read back from Hotglue.",
+  "trigger_sync (connection_id): a sync now. start_authorization (connection_id, provider tiktok_ads | microsoft_ads): a redirect_url to sign in again.",
+  "scout_google_ads_accounts / reconcile_google_ads_account_history (connection_id; Google Ads only): background account discovery and history reconcile.",
+  "discover_platform_accounts (connection_id): the platform accounts the sign-in sees, grouped; approve_platform_accounts (accounts [{id, action approve | link | create | dismiss, ads_client_id or ads_client_name}]); sync_approved_platform_accounts (connection_id).",
+  "Results use camelCase keys. Scope: write:hotglue_connections (API keys may use run:hotglue_connector_commands).",
+].join(" ");
+
+// The aria_connector_command payload: only the fields given. connection_id null (set_run_after) is kept.
+export function ariaCommandPayload(args) {
+  const id = (value) => (value === undefined || value === null ? value : String(value));
+  const payload = {
+    connection_id: id(args.connection_id),
+    source_name: args.source_name,
+    connector_key: args.connector_key,
+    name: args.name,
+    start_date: args.start_date,
+    config: args.config,
+    streams: args.streams,
+    all_streams: args.all_streams,
+    cron: args.cron,
+    timezone: args.timezone,
+    enabled: args.enabled,
+    dataset_id: id(args.dataset_id),
+    cron_expression: args.cron_expression,
+    hotglue_connection_id: id(args.hotglue_connection_id),
+    account_ids: args.account_ids,
+  };
+  return Object.fromEntries(Object.entries(payload).filter(([, value]) => value !== undefined));
+}
+
+// The hotglue_connector_command payload. Rails takes the bare numeric id.
+export function hotglueCommandPayload(args) {
+  const payload = {
+    connection_id: args.connection_id === undefined ? undefined : String(args.connection_id).replace(/^hotglue_/, ""),
+    provider: args.provider,
+    connector_id: args.connector_id,
+    schedule_expression: args.schedule_expression,
+    state: args.state,
+    accounts: args.accounts,
+  };
+  return Object.fromEntries(Object.entries(payload).filter(([, value]) => value !== undefined));
+}
 
 function reportTemplateBody(args) {
   return {
@@ -736,40 +822,92 @@ export function createServer(config) {
     "aria_connector_command",
     {
       title: "Aria Connector Command",
-      description:
-        "POST /accounts/:account_id/connector_commands/aria. Manage Aria connections (Google Ads, GA4, Meta on the Aria runner). command: create_connection (source_name google_ads | google_analytics_4 | facebook_ads, name, start_date), start_authorization (connection_id; returns authorization_url, a link the client opens to sign in without a Growth Nirvana login: shown once, 7 days, one sign-in), get_schedule / set_schedule (connection_id, cron, timezone, enabled; a blank cron removes the schedule). Runs and cancel are run_connector_job / kill_connector_job with connector_id aria_{id}. Needs the account's Aria flag. Scope: run:aria_connector_commands.",
+      description: ARIA_COMMAND_DESCRIPTION,
       inputSchema: accountOptional.extend({
-        command: z.enum(["create_connection", "start_authorization", "get_schedule", "set_schedule"]),
-        connection_id: z.union([z.string().min(1), z.number().int()]).optional(),
-        source_name: z.enum(["google_ads", "google_analytics_4", "facebook_ads"]).optional(),
+        command: z.enum(ARIA_COMMANDS),
+        connection_id: z
+          .union([z.string().min(1), z.number().int(), z.null()])
+          .optional()
+          .describe("The Aria connection: aria_{id} or {id}. set_run_after: null (or empty) turns run-after off."),
+        source_name: z
+          .string()
+          .optional()
+          .describe("create_connection / list_connector_types: the GN source (google_ads, google_analytics_4, facebook_ads, hubspot, linkedin_ads, tiktok_ads, s3, google_sheets, franconnect, the_trade_desk) or its runner connector key."),
+        connector_key: z.string().optional().describe("list_connector_types: a runner connector key (googleads, s3_files...) instead of source_name."),
         name: z.string().optional(),
-        start_date: z.string().optional(),
-        cron: z.string().optional(),
-        timezone: z.string().optional(),
-        enabled: z.boolean().optional(),
+        start_date: z.string().optional().describe("YYYY-MM-DD. create_connection: default 30 days ago (sources that take one)."),
+        config: jsonObject
+          .optional()
+          .describe(
+            "create_connection / configure_connection: the connector's settings in runner shape, from list_connector_types' config_schema (S3 bucket and reports, Google Sheets sheets, FranConnect tenant_host, The Trade Desk reports [{stream, mode, keys}] and history_days, streams, lookback_days...). configure_connection changes only the keys given; null removes one. Never a login, password, token or key: those are refused; use request_credentials.",
+          ),
+        streams: z.array(z.string()).optional().describe("configure_connection: sync exactly these streams (drops all_streams)."),
+        all_streams: z.boolean().optional().describe("configure_connection: true syncs every stream, including new ones (drops the list)."),
+        cron: z.string().optional().describe("set_schedule: cron expression; blank removes the schedule."),
+        timezone: z.string().optional().describe("set_schedule: IANA time zone (default UTC)."),
+        enabled: z.boolean().optional().describe("set_schedule: the schedule is on. set_run_after: the dataset is enabled."),
+        dataset_id: z.union([z.string().min(1), z.number().int()]).optional().describe("set_run_after: the dataset to run after the connection syncs."),
+        cron_expression: z.string().optional().describe("set_run_after: the dataset's own schedule too; empty removes it."),
+        hotglue_connection_id: z.union([z.string().min(1), z.number().int()]).optional().describe("check_hotglue_sign_in / copy_hotglue_sign_in: hotglue_{id} or {id}."),
+        account_ids: z.union([z.literal("all"), z.array(z.string())]).optional().describe("copy_hotglue_sign_in: \"all\" (default) or ad account ids."),
       }),
       annotations: reportWriteAnnotations,
     },
     async (args, request) => {
       const accountId = normalizeAccountId(args.account_id);
-      const payload = {
-        connection_id: args.connection_id === undefined ? undefined : String(args.connection_id),
-        source_name: args.source_name,
-        name: args.name,
-        start_date: args.start_date,
-        cron: args.cron,
-        timezone: args.timezone,
-        enabled: args.enabled,
-      };
       return request(
         "POST",
         `/accounts/${accountId}/connector_commands/aria`,
         {},
-        { command: args.command, payload },
+        { command: args.command, payload: ariaCommandPayload(args) },
         accountId,
       );
     },
   );
+
+  registerTool(
+    server,
+    config,
+    "hotglue_connector_command",
+    {
+      title: "Hotglue Connector Command",
+      description: HOTGLUE_COMMAND_DESCRIPTION,
+      inputSchema: accountOptional.extend({
+        command: z.enum(HOTGLUE_COMMANDS),
+        connection_id: z
+          .union([z.string().min(1), z.number().int()])
+          .optional()
+          .describe("The Hotglue connection: hotglue_{id} or {id} (from list_connectors)."),
+        provider: z.enum(["tiktok_ads", "microsoft_ads"]).optional().describe("start_authorization only."),
+        connector_id: z.string().optional().describe("get_schedule / set_schedule: Hotglue's connector id, when the connection has more than one."),
+        schedule_expression: z.string().optional().describe("set_schedule: UTC cron, e.g. 0 4,10,16,22 * * *."),
+        state: z.enum(["ENABLED", "DISABLED"]).optional().describe("set_schedule: default ENABLED."),
+        accounts: z
+          .array(
+            z.object({
+              id: z.union([z.string(), z.number()]),
+              action: z.enum(["approve", "link", "create", "dismiss"]).optional(),
+              ads_client_id: z.union([z.string(), z.number()]).optional(),
+              ads_client_name: z.string().optional(),
+            }),
+          )
+          .optional()
+          .describe("approve_platform_accounts: platform account rows (ids from discover_platform_accounts) and what to do with each."),
+      }),
+      annotations: reportWriteAnnotations,
+    },
+    async (args, request) => {
+      const accountId = normalizeAccountId(args.account_id);
+      return request(
+        "POST",
+        `/accounts/${accountId}/connector_commands/hotglue`,
+        {},
+        { command: args.command, payload: hotglueCommandPayload(args) },
+        accountId,
+      );
+    },
+  );
+
   registerTool(
     server,
     config,

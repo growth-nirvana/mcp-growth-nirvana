@@ -979,6 +979,99 @@ test("aria_connector_command posts the command and its payload", async () => {
   assert.match(result.structuredContent.data.authorization_url, /\/authorize\//);
 });
 
+test("aria_connector_command exposes every setup command and sends only the fields given", async () => {
+  const server = buildServer();
+  const commandSchema = server._registeredTools.aria_connector_command.inputSchema.shape.command;
+  assert.deepEqual(commandSchema.options, [
+    "list_connector_types",
+    "get_connection",
+    "create_connection",
+    "configure_connection",
+    "request_credentials",
+    "start_authorization",
+    "get_inbox_address",
+    "get_schedule",
+    "set_schedule",
+    "set_run_after",
+    "check_hotglue_sign_in",
+    "copy_hotglue_sign_in",
+  ]);
+  let seen;
+  globalThis.fetch = async (url, init) => {
+    seen = { url, body: JSON.parse(init.body) };
+    return jsonResponse(201, { data: { id: "aria_9", next_step: "request_credentials: ..." }, errors: [] });
+  };
+
+  await server._registeredTools.aria_connector_command.handler({
+    account_id: "42",
+    command: "create_connection",
+    source_name: "s3",
+    name: "Drops",
+    config: { bucket: "drops", reports: [{ stream: "leads", prefix: "daily/" }] },
+  });
+
+  assert.match(seen.url, /\/accounts\/42\/connector_commands\/aria$/);
+  assert.deepEqual(seen.body, {
+    command: "create_connection",
+    payload: { source_name: "s3", name: "Drops", config: { bucket: "drops", reports: [{ stream: "leads", prefix: "daily/" }] } },
+  });
+
+  await server._registeredTools.aria_connector_command.handler({
+    account_id: "42",
+    command: "configure_connection",
+    connection_id: "aria_9",
+    config: { history_days: null },
+    streams: ["stream_ad"],
+  });
+  assert.deepEqual(seen.body.payload, { connection_id: "aria_9", config: { history_days: null }, streams: ["stream_ad"] });
+});
+
+test("aria_connector_command set_run_after keeps a null connection_id (turns run-after off)", async () => {
+  const server = buildServer();
+  let seen;
+  globalThis.fetch = async (_url, init) => {
+    seen = JSON.parse(init.body);
+    return jsonResponse(200, { data: { id: 5 }, errors: [] });
+  };
+
+  await server._registeredTools.aria_connector_command.handler({ account_id: "42", command: "set_run_after", dataset_id: 5, connection_id: null });
+
+  assert.deepEqual(seen.payload, { dataset_id: "5", connection_id: null });
+});
+
+test("aria_connector_command describes the scopes and that secrets go through request_credentials", () => {
+  const server = buildServer();
+  const { description } = server._registeredTools.aria_connector_command;
+  assert.match(description, /write:aria_connections/);
+  assert.match(description, /request_credentials/);
+  assert.match(description, /secret_in_config/);
+});
+
+test("hotglue_connector_command sets a schedule on the bare connection id", async () => {
+  const server = buildServer();
+  assert.ok(Object.keys(server._registeredTools).includes("hotglue_connector_command"));
+  let seen;
+  globalThis.fetch = async (url, init) => {
+    seen = { url, body: JSON.parse(init.body) };
+    return jsonResponse(200, { data: { outcome: "updated", connectionId: 33 }, errors: [] });
+  };
+
+  const result = await server._registeredTools.hotglue_connector_command.handler({
+    account_id: "42",
+    command: "set_schedule",
+    connection_id: "hotglue_33",
+    schedule_expression: "0 4,10,16,22 * * *",
+    state: "ENABLED",
+  });
+
+  assert.match(seen.url, /\/accounts\/42\/connector_commands\/hotglue$/);
+  assert.deepEqual(seen.body, {
+    command: "set_schedule",
+    payload: { connection_id: "33", schedule_expression: "0 4,10,16,22 * * *", state: "ENABLED" },
+  });
+  assert.equal(result.structuredContent.data.outcome, "updated");
+});
+
 function oauthServer() {
   return createServer({
     baseUrl: "https://example.com/api/v1/mcp",

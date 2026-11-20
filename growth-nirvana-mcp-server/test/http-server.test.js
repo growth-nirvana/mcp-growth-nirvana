@@ -74,6 +74,8 @@ test("protected resource metadata is served from both well-known paths", async (
     assert.ok(body.scopes_supported.includes("write:report_templates"));
     assert.ok(body.scopes_supported.includes("run:reports"));
     assert.ok(body.scopes_supported.includes("write:brand_kits"));
+    assert.ok(body.scopes_supported.includes("read:aria_connections"));
+    assert.ok(body.scopes_supported.includes("write:aria_connections"));
   }
 });
 
@@ -126,5 +128,5 @@ test("initialize tells the client to ask which account when there are several", 
   const body = await response.json();
   assert.match(body.result.instructions, /list_my_accounts/);
   assert.match(body.result.instructions, /ask them; never guess/);
-  assert.equal(body.result.serverInfo.version, "1.5.0");
+  assert.equal(body.result.serverInfo.version, "1.6.0");
 });

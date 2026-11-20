@@ -24,6 +24,9 @@ export const MCP_SCOPES = [
   "run:dataset_bundle_exports",
   "write:dataset_contexts",
   "write:hotglue_connections",
+  "read:aria_connections",
+  "write:aria_connections",
+  "write:aria_hotglue_sign_in_copy",
 ];
 
 export function protectedResourceMetadata(config) {
