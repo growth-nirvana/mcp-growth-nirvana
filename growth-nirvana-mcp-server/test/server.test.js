@@ -993,6 +993,7 @@ test("aria_connector_command exposes every setup command and sends only the fiel
     "get_schedule",
     "set_schedule",
     "set_run_after",
+    "delete_connection",
     "check_hotglue_sign_in",
     "copy_hotglue_sign_in",
   ]);
@@ -1024,6 +1025,27 @@ test("aria_connector_command exposes every setup command and sends only the fiel
     streams: ["stream_ad"],
   });
   assert.deepEqual(seen.body.payload, { connection_id: "aria_9", config: { history_days: null }, streams: ["stream_ad"] });
+});
+
+test("aria_connector_command delete_connection and copy_hotglue_sign_in into a connection send connection_id", async () => {
+  const server = buildServer();
+  let seen;
+  globalThis.fetch = async (_url, init) => {
+    seen = JSON.parse(init.body);
+    return jsonResponse(200, { data: { connector_id: "aria_47" }, errors: [] });
+  };
+
+  await server._registeredTools.aria_connector_command.handler({ account_id: "322", command: "delete_connection", connection_id: "aria_47" });
+  assert.deepEqual(seen, { command: "delete_connection", payload: { connection_id: "aria_47" } });
+
+  await server._registeredTools.aria_connector_command.handler({
+    account_id: "322",
+    command: "copy_hotglue_sign_in",
+    connection_id: 47,
+    hotglue_connection_id: "hotglue_206",
+    account_ids: "all",
+  });
+  assert.deepEqual(seen, { command: "copy_hotglue_sign_in", payload: { connection_id: "47", hotglue_connection_id: "hotglue_206", account_ids: "all" } });
 });
 
 test("aria_connector_command set_run_after keeps a null connection_id (turns run-after off)", async () => {
