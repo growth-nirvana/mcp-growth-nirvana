@@ -128,7 +128,7 @@ export function normalizeAccountId(value) {
   return String(value);
 }
 
-export const SERVER_VERSION = "1.6.0";
+export const SERVER_VERSION = "1.6.1";
 const SERVER_INSTRUCTIONS = [
   "A Growth Nirvana user can belong to several client accounts, and one sign-in covers all of them.",
   "Before account tools, call list_my_accounts unless the user already named the account. If it returns more than one account and the user hasn't said which, ask them; never guess.",
@@ -147,6 +147,7 @@ export const ARIA_COMMANDS = [
   "get_schedule",
   "set_schedule",
   "set_run_after",
+  "delete_connection",
   "check_hotglue_sign_in",
   "copy_hotglue_sign_in",
 ];
@@ -160,7 +161,8 @@ const ARIA_COMMAND_DESCRIPTION = [
   "set_schedule (connection_id, cron, timezone, enabled; blank cron removes it) and set_run_after (dataset_id, connection_id or null to turn off, cron_expression, enabled: the dataset runs after each sync that loaded rows).",
   "get_connection (connection_id) shows config without secrets, signed_in, auth_status, streams, schedule, last runs and the datasets that run after it; get_schedule reads the schedule.",
   "Never put a password, token, API key or access key in config: it is refused (secret_in_config); use request_credentials so the person types it on the runner's page. Links are shown once: pass them on, don't store them.",
-  "check_hotglue_sign_in / copy_hotglue_sign_in (hotglue_connection_id, source_name, name, start_date, account_ids) reuse a Hotglue Google Ads or Facebook sign-in for a new Aria connection.",
+  "delete_connection (connection_id) deletes the connection on the Aria runner and removes it from GN; its BigQuery dataset and data are kept (dataset_kept); refused while a sync is going.",
+  "check_hotglue_sign_in / copy_hotglue_sign_in (hotglue_connection_id, source_name, name, start_date, account_ids) reuse a Hotglue Google Ads or Facebook sign-in for a new Aria connection; copy_hotglue_sign_in with connection_id copies it into that existing Google Ads / Facebook connection still waiting for its sign-in instead (start_date and name change only when given).",
   "Runs and cancel are run_connector_job / kill_connector_job with connector_id aria_{id}.",
   "Scopes: read:aria_connections for list_connector_types, get_connection, get_schedule; write:aria_connections for the rest; write:aria_hotglue_sign_in_copy for the Hotglue sign-in commands. Writes need a GN support user and every command but get_schedule the account's Aria flag.",
 ].join(" ");
@@ -828,7 +830,7 @@ export function createServer(config) {
         connection_id: z
           .union([z.string().min(1), z.number().int(), z.null()])
           .optional()
-          .describe("The Aria connection: aria_{id} or {id}. set_run_after: null (or empty) turns run-after off."),
+          .describe("The Aria connection: aria_{id} or {id}. set_run_after: null (or empty) turns run-after off. copy_hotglue_sign_in: the pending connection to copy the sign-in into (omit to create a new one)."),
         source_name: z
           .string()
           .optional()
