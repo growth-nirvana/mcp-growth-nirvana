@@ -1260,3 +1260,17 @@ test("api-key mode is unchanged: key headers, self default, explicit account kep
   assert.equal(seen[0].headers.Authorization, "Bearer secret");
   assert.equal(seen[0].headers["X-API-Key"], "secret");
 });
+
+test("platform_request and run_platform_request accept hubspot and chatgpt_ads", () => {
+  const server = buildServer();
+  const requests = [
+    { platform: "hubspot", method: "POST", path: "/crm/v3/objects/deals/search", connectorId: "aria_10", body: { limit: 1 } },
+    { platform: "chatgpt_ads", method: "GET", path: "/ad_account/insights", connectorId: "hotglue_3109", query: { time_granularity: "daily" } },
+  ];
+  for (const request of requests) {
+    for (const name of ["platform_request", "run_platform_request"]) {
+      const parsed = server._registeredTools[name].inputSchema.safeParse({ account_id: "42", ...request });
+      assert.ok(parsed.success, `${name} rejected ${request.platform}`);
+    }
+  }
+});
