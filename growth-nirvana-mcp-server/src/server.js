@@ -58,9 +58,11 @@ const reportWriteAnnotations = {
   idempotentHint: false,
   openWorldHint: true,
 };
-const platformEnum = z.enum(["google_ads", "meta", "tiktok", "microsoft_ads", "google_analytics_4", "linkedin_ads"]);
+const platformEnum = z.enum(["google_ads", "meta", "tiktok", "microsoft_ads", "google_analytics_4", "linkedin_ads", "hubspot", "chatgpt_ads"]);
 const LINKEDIN_PLATFORM_NOTE =
-  "linkedin_ads paths are Rest.li paths under /rest/ (for example GET /rest/adAccounts/{id}/adCampaigns?q=search, or GET /rest/adAnalytics?q=analytics&pivot=CAMPAIGN&timeGranularity=DAILY&dateRange=...&accounts=List(urn%3Ali%3AsponsorAccount%3A{id})&fields=impressions,clicks,costInLocalCurrency). Media downloads from media.licdn.com need no auth; downloads are capped at 10MB.";
+  "linkedin_ads paths are Rest.li paths under /rest/ (for example GET /rest/adAccounts/{id}/adCampaigns?q=search, or GET /rest/adAnalytics?q=analytics&pivot=CAMPAIGN&timeGranularity=DAILY&dateRange=...&accounts=List(urn%3Ali%3AsponsorAccount%3A{id})&fields=impressions,clicks,costInLocalCurrency). Media downloads from media.licdn.com need no auth; downloads are capped at 10MB. " +
+  "hubspot (Hotglue hubspot-beta or Aria hubspot) is read-only on api.hubapi.com: GET /crm/v3/objects, properties, pipelines, owners, schemas, /account-info/v3/details; POST only /crm/v3/objects/{object}/search (returns total) and batch/read. " +
+  "chatgpt_ads (Hotglue chatgpt-ads) paths go under /v1 on api.ads.openai.com: GET /ad_account, /ad_account/insights, /campaigns, /ad_groups, /ads; POST /conversions/insights.";
 const platformRequestFields = {
   platform: platformEnum,
   method: z.string().min(1),
