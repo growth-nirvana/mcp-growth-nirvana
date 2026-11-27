@@ -128,5 +128,6 @@ test("initialize tells the client to ask which account when there are several", 
   const body = await response.json();
   assert.match(body.result.instructions, /list_my_accounts/);
   assert.match(body.result.instructions, /ask them; never guess/);
-  assert.equal(body.result.serverInfo.version, "1.6.1");
+  assert.match(body.result.instructions, /docs\.growthnirvana\.com/);
+  assert.equal(body.result.serverInfo.version, "1.6.2");
 });

@@ -128,12 +128,13 @@ export function normalizeAccountId(value) {
   return String(value);
 }
 
-export const SERVER_VERSION = "1.6.1";
+export const SERVER_VERSION = "1.6.2";
 const SERVER_INSTRUCTIONS = [
   "A Growth Nirvana user can belong to several client accounts, and one sign-in covers all of them.",
   "Before account tools, call list_my_accounts unless the user already named the account. If it returns more than one account and the user hasn't said which, ask them; never guess.",
   "Pass that account's id as account_id on every call. Each result has an `account` {id, name}: say which client the data came from, and don't mix clients in one answer unless the user asked to compare them.",
   "An insufficient_scope error means this sign-in is read-only for that action: tell the user which permission is needed and that they can reconnect Growth Nirvana and tick it on the consent screen.",
+  "To connect a source to BigQuery (Google Ads, Meta Ads, GA4, LinkedIn Ads, TikTok Ads, Microsoft Ads, Google Business Profile, HubSpot, Google Sheets, PostgreSQL), use aria_connector_command; the setup steps, settings and every table and column of each source are documented at https://docs.growthnirvana.com (https://docs.growthnirvana.com/api/connectors/<slug>.json for one source as JSON).",
 ].join(" ");
 
 export const ARIA_COMMANDS = [
@@ -153,7 +154,7 @@ export const ARIA_COMMANDS = [
 ];
 
 const ARIA_COMMAND_DESCRIPTION = [
-  "POST /accounts/:account_id/connector_commands/aria. Set up and manage Aria connections from start to finish (Google Ads, GA4, Meta, HubSpot, TikTok, LinkedIn Ads, S3 files, Google Sheets, FranConnect, The Trade Desk reports). A person only opens a link when the source needs one.",
+  "Connect a source to the account's BigQuery and manage it: 'connect Google Ads', 'get my Meta ads data into BigQuery', 'sync HubSpot', 'add a Google Sheet', 'schedule the GA4 sync'. POST /accounts/:account_id/connector_commands/aria sets up and manages Aria connections from start to finish (Google Ads, GA4, Meta, HubSpot, TikTok, LinkedIn Ads, Microsoft Ads, Google Business Profile, S3 files, Google Sheets, PostgreSQL, FranConnect, The Trade Desk reports). A person only opens a link when the source needs one. What each source syncs and its tables: https://docs.growthnirvana.com/connectors/<slug>/.",
   "Flow: list_connector_types (source_name or connector_key optional; each kind's sign_in: oauth | credential | inbox | none | imported, next_step, required_settings, streams, login field names; one kind adds its config_schema) ->",
   "create_connection (source_name, name, start_date, config in runner shape; returns connector_id aria_{id} and next_step) ->",
   "the sign-in: start_authorization for oauth (connection_id; returns authorization_url for the client, 7 days), request_credentials for credential (connection_id; returns credentials_url, a one-time page where the person types the login, and expires_at), get_inbox_address for inbox (connection_id; the address to send or forward the report emails to), Google Sheets: share each sheet with share_with_email ->",
